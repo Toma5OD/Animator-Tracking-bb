@@ -28,13 +28,19 @@ async function loadModels() {
     try {
         elements.debugInfo.textContent = 'Status: Loading PoseNet model...';
         
-        // Use TensorFlow.js built-in model loading instead of TFHub (avoids CORS issues)
-        posenet = await tf.loadGraphModel(
-            'https://storage.googleapis.com/tfjs-models/savedmodel/posenet/mobilenet/float/050/model-stride16.json'
-        );
+        // Load PoseNet model directly from TensorFlow.js
+        posenet = await posenetModule.load({
+            architecture: 'MobileNetV1',
+            outputStride: 16,
+            inputResolution: { width: 640, height: 480 },
+            multiplier: 0.75,
+            quantBytes: 2
+        });
         
-        // Facemesh placeholder - in a real implementation, you would load the actual model
-        facemesh = { loaded: true };
+        elements.debugInfo.textContent = 'Status: Loading Face detection model...';
+        // Load Face-API.js models
+        await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+        await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
         
         elements.debugInfo.textContent = 'Status: Models loaded successfully';
         elements.loadingScreen.style.display = 'none';
@@ -43,20 +49,170 @@ async function loadModels() {
         console.error('Error loading models:', error);
         
         // Provide better user feedback and fallback to mock mode
-        elements.debugInfo.textContent = `Error loading models. Using fallback demo mode.`;
+        elements.debugInfo.textContent = `Error loading models: ${error.message}. Using fallback demo mode.`;
         
+        console.log("Falling back to simulation mode due to error:", error);
         // Create mock models to allow the interface to work without the real models
-        posenet = { 
-            predict: () => {
-                // Return mock data structure that simulates posenet output
-                return tf.tensor([]); // This is just a placeholder
-            }
-        };
-        facemesh = { loaded: true };
+        posenet = null;
+        facemesh = null;
         
         // Hide loading screen to let user interact with the fallback
         elements.loadingScreen.style.display = 'none';
         return true; // Return true so the app can continue in "demo mode"
+    }
+}
+
+// Process body tracking using PoseNet
+async function processBodyTracking() {
+    if (!posenet && !trackingActive) {
+        // If real tracking failed, use simulation
+        return simulateBodyPose();
+    }
+    
+    try {
+        // Perform real-time pose detection
+        const poses = await posenet.estimateMultiplePoses(elements.video, {
+            flipHorizontal: true,
+            maxDetections: 1, // Just detect the main person
+            scoreThreshold: 0.6,
+            nmsRadius: 20
+        });
+        
+        if (poses && poses.length > 0) {
+            const pose = poses[0]; // Take the first (most confident) detected person
+            
+            // Apply smoothing
+            const smoothedPose = applySmoothing(pose.keypoints, lastBodyPosition, appState.config.smoothingLevel);
+            lastBodyPosition = smoothedPose;
+            
+            // Update avatar body based on detected pose
+            updateAvatarBody(smoothedPose);
+            
+            return smoothedPose;
+        } else {
+            // No poses detected, use last known position
+            return lastBodyPosition;
+        }
+    } catch (error) {
+        console.error('Error in body tracking:', error);
+        // Fall back to simulation if there's an error
+        const simulated = simulateBodyPose();
+        return simulated; 
+    }
+}
+
+// Process face tracking using Face-API.js
+async function processFaceTracking() {
+    if (!faceapi && !trackingActive) {
+        // If real tracking failed, use simulation
+        return simulateFaceDetection();
+    }
+    
+    try {
+        // Detect face with landmarks
+        const detections = await faceapi.detectSingleFace(
+            elements.video, 
+            new faceapi.TinyFaceDetectorOptions()
+        ).withFaceLandmarks();
+        
+        if (detections) {
+            // Calculate face position and angles
+            const box = detections.detection.box;
+            const landmarks = detections.landmarks;
+            const jawOutline = landmarks.getJawOutline();
+            const nose = landmarks.getNose();
+            
+            // Center of face
+            const faceX = box.x + box.width / 2;
+            const faceY = box.y + box.height / 2;
+            
+            // Calculate face rotation (simplified)
+            const jawLeft = jawOutline[0];
+            const jawRight = jawOutline[jawOutline.length - 1];
+            const noseTop = nose[0];
+            const noseTip = nose[nose.length - 1];
+            
+            // Calculate angles
+            const rx = Math.atan2(noseTip.y - noseTop.y, noseTip.x - noseTop.x) * 180 / Math.PI;
+            const ry = Math.atan2(jawRight.x - jawLeft.x, jawLeft.y - jawRight.y) * 180 / Math.PI;
+            
+            // Scale based on face width (closer = bigger face)
+            const z = (box.width / elements.video.width - 0.15) * 2;
+            
+            // Create face data
+            const faceData = {
+                x: (faceX - elements.video.width / 2) / 10,  // Center-normalized x position
+                y: (faceY - elements.video.height / 2) / 10, // Center-normalized y position
+                z: z,                                        // Scale/depth
+                rx: rx * 0.5,                                // Head nod (up/down)
+                ry: ry * 0.5,                                // Head turn (left/right)
+                rz: (jawLeft.y - jawRight.y) * 0.5           // Head tilt
+            };
+            
+            // Apply smoothing
+            const smoothedFace = {
+                x: applySmoothing(faceData.x, lastFacePosition.x, appState.config.smoothingLevel),
+                y: applySmoothing(faceData.y, lastFacePosition.y, appState.config.smoothingLevel),
+                z: applySmoothing(faceData.z, lastFacePosition.z, appState.config.smoothingLevel),
+                rx: applySmoothing(faceData.rx, lastFacePosition.rx, appState.config.smoothingLevel),
+                ry: applySmoothing(faceData.ry, lastFacePosition.ry, appState.config.smoothingLevel),
+                rz: applySmoothing(faceData.rz, lastFacePosition.rz, appState.config.smoothingLevel)
+            };
+            
+            lastFacePosition = smoothedFace;
+            
+            // Update avatar face
+            updateAvatarFace(smoothedFace);
+            
+            return smoothedFace;
+        } else {
+            // No face detected, use simulation as fallback
+            return simulateFaceDetection();
+        }
+    } catch (error) {
+        console.error('Error in face tracking:', error);
+        // Fall back to simulation if there's an error
+        return simulateFaceDetection();
+    }
+}
+
+// Main tracking loop with performance optimization
+async function trackingLoop() {
+    if (!trackingActive) return;
+    
+    try {
+        // Ensure the video is playing and ready
+        if (elements.video.readyState === elements.video.HAVE_ENOUGH_DATA) {
+            // Draw video to canvas for processing and output
+            elements.ctx.drawImage(elements.video, 0, 0, elements.canvas.width, elements.canvas.height);
+            
+            // Use Promise.all to run body and face tracking in parallel
+            const [bodyPose, faceData] = await Promise.all([
+                processBodyTracking(),
+                processFaceTracking()
+            ]);
+            
+            // Update display based on selected mode
+            updateDisplay();
+            
+            // Save the latest positions to app state for other modules to use
+            appState.lastBodyPosition = bodyPose || lastBodyPosition;
+            appState.lastFacePosition = faceData || lastFacePosition;
+            
+            // Update debug info with FPS
+            const now = Date.now();
+            const fps = Math.round(1000 / (now - (window.lastFrameTime || now)));
+            elements.debugInfo.textContent = `Status: Tracking Active | FPS: ${fps} | Mode: ${posenet ? 'Real' : 'Simulated'}`;
+            window.lastFrameTime = now;
+        }
+        
+        // Continue loop with optimal timing
+        animationFrameId = requestAnimationFrame(trackingLoop);
+    } catch (error) {
+        console.error('Error in tracking loop:', error);
+        elements.debugInfo.textContent = `Error in tracking: ${error.message}`;
+        // Continue loop despite error
+        animationFrameId = requestAnimationFrame(trackingLoop);
     }
 }
 
