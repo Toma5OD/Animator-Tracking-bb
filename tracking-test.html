@@ -3,25 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MediaPipe Tracking Test</title>
+    <title>Simple Avatar Tracker</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
             font-family: Arial, sans-serif;
-            background-color: #222;
-            color: white;
+            background-color: #111;
         }
         #container {
             position: relative;
             width: 100vw;
             height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
         }
         #videoElement {
             position: absolute;
             width: 100%;
             height: 100%;
             object-fit: cover;
+            opacity: 0.2;
             transform: scaleX(-1); /* Mirror for more intuitive interaction */
         }
         #canvasOutput {
@@ -29,161 +30,317 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+            z-index: 5;
+        }
+        #avatarSVG {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #debugInfo {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            z-index: 100;
+            white-space: pre;
+            max-width: 400px;
+            max-height: 300px;
+            overflow: auto;
         }
         #controls {
             position: absolute;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.7);
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 10;
+            z-index: 100;
             display: flex;
             gap: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
         }
         button {
             padding: 10px 20px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 16px;
             cursor: pointer;
+            background: #4CAF50;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            font-weight: bold;
         }
         button:disabled {
-            background: #666;
+            background: #cccccc;
             cursor: not-allowed;
         }
-        #debugInfo {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.7);
-            padding: 10px;
-            border-radius: 5px;
-            font-family: monospace;
+        #loadingScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0,0,0,0.8);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
         }
-        #status {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.7);
-            padding: 20px;
-            border-radius: 10px;
-            font-size: 24px;
-            text-align: center;
+        .loader {
+            border: 5px solid #333;
+            border-top: 5px solid #4CAF50;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
+    <!-- Loading Screen -->
+    <div id="loadingScreen">
+        <div class="loader"></div>
+        <h2>Loading MediaPipe Models...</h2>
+        <p>This may take a moment depending on your connection speed.</p>
+    </div>
+
     <div id="container">
         <video id="videoElement" playsinline autoplay></video>
         <canvas id="canvasOutput"></canvas>
-        <div id="debugInfo">FPS: 0</div>
-        <div id="status">Click Start Camera to begin tracking test</div>
+        
+        <!-- SVG Avatar Container -->
+        <svg id="avatarSVG" viewBox="0 0 640 480" preserveAspectRatio="xMidYMid meet">
+            <defs>
+                <radialGradient id="avatarGlow" cx="0.5" cy="0.5" r="0.5" fx="0.5" fy="0.5">
+                    <stop offset="0%" stop-color="rgba(255,255,255,0.3)" />
+                    <stop offset="100%" stop-color="rgba(255,255,255,0)" />
+                </radialGradient>
+                
+                <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
+                    <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="glow" />
+                    <feComposite in="SourceGraphic" in2="glow" operator="over" />
+                </filter>
+            </defs>
+            
+            <rect width="100%" height="100%" fill="rgba(0,0,0,0.1)" id="background"/>
+            
+            <!-- Avatar Group - Will be centered in the view -->
+            <g id="avatarGroup" transform="translate(320, 240)">
+                <!-- Upper Body -->
+                <g id="upperBody">
+                    <!-- Torso -->
+                    <rect id="torso" x="-80" y="30" width="160" height="200" rx="20" fill="#222" />
+                    
+                    <!-- Shoulders -->
+                    <ellipse id="leftShoulder" cx="-85" cy="50" rx="25" ry="20" fill="#333" />
+                    <ellipse id="rightShoulder" cx="85" cy="50" rx="25" ry="20" fill="#333" />
+                    
+                    <!-- Arms -->
+                    <g id="leftArm">
+                        <rect id="leftUpperArm" x="-110" y="50" width="25" height="80" rx="10" fill="#333" />
+                        <rect id="leftForearm" x="-110" y="130" width="25" height="80" rx="8" fill="#444" />
+                    </g>
+                    
+                    <g id="rightArm">
+                        <rect id="rightUpperArm" x="85" y="50" width="25" height="80" rx="10" fill="#333" />
+                        <rect id="rightForearm" x="85" y="130" width="25" height="80" rx="8" fill="#444" />
+                    </g>
+                    
+                    <!-- Neck -->
+                    <rect id="neck" x="-20" y="0" width="40" height="30" fill="#555" />
+                </g>
+                
+                <!-- Head with Mask -->
+                <g id="head">
+                    <!-- Head Base -->
+                    <ellipse id="headBase" cx="0" cy="-50" rx="60" ry="70" fill="#666" />
+                    
+                    <!-- Mask -->
+                    <path id="mask" d="M-60 -50 Q-60 -120 0 -120 Q60 -120 60 -50 L60 -10 Q60 20 0 20 Q-60 20 -60 -10 Z" fill="#169b62" />
+                    
+                    <!-- Eyes -->
+                    <g id="eyes">
+                        <ellipse id="leftEye" cx="-25" cy="-50" rx="12" ry="15" fill="#000" />
+                        <ellipse id="rightEye" cx="25" cy="-50" rx="12" ry="15" fill="#000" />
+                        <!-- Eyebrows -->
+                        <path id="leftEyebrow" d="M-40 -70 L-10 -70" stroke="#000" stroke-width="5" stroke-linecap="round" />
+                        <path id="rightEyebrow" d="M10 -70 L40 -70" stroke="#000" stroke-width="5" stroke-linecap="round" />
+                    </g>
+                    
+                    <!-- Mouth -->
+                    <ellipse id="mouth" cx="0" cy="-10" rx="20" ry="8" fill="#000" />
+                </g>
+            </g>
+        </svg>
+        
+        <div id="debugInfo">Status: Loading...</div>
+        
         <div id="controls">
             <button id="startButton">Start Camera</button>
-            <button id="stopButton" disabled>Stop</button>
+            <button id="stopButton" disabled>Stop Tracking</button>
+            <button id="toggleDebug">Toggle Debug View</button>
         </div>
     </div>
 
-    <!-- Import MediaPipe libraries -->
+    <!-- MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const video = document.getElementById('videoElement');
-            const canvas = document.getElementById('canvasOutput');
-            const ctx = canvas.getContext('2d');
-            const startButton = document.getElementById('startButton');
-            const stopButton = document.getElementById('stopButton');
-            const debugInfo = document.getElementById('debugInfo');
-            const status = document.getElementById('status');
+        // DOM elements
+        const elements = {
+            video: document.getElementById('videoElement'),
+            canvas: document.getElementById('canvasOutput'),
+            ctx: document.getElementById('canvasOutput').getContext('2d'),
+            debugInfo: document.getElementById('debugInfo'),
+            loadingScreen: document.getElementById('loadingScreen'),
+            startButton: document.getElementById('startButton'),
+            stopButton: document.getElementById('stopButton'),
+            toggleDebug: document.getElementById('toggleDebug'),
+            background: document.getElementById('background')
+        };
+
+        // Avatar SVG elements
+        const avatar = {
+            group: document.getElementById('avatarGroup'),
+            head: document.getElementById('head'),
+            leftEye: document.getElementById('leftEye'),
+            rightEye: document.getElementById('rightEye'),
+            mouth: document.getElementById('mouth'),
+            leftEyebrow: document.getElementById('leftEyebrow'),
+            rightEyebrow: document.getElementById('rightEyebrow'),
+            leftArm: document.getElementById('leftArm'),
+            rightArm: document.getElementById('rightArm'),
+            upperBody: document.getElementById('upperBody'),
+            leftShoulder: document.getElementById('leftShoulder'),
+            rightShoulder: document.getElementById('rightShoulder')
+        };
+
+        // App state
+        const state = {
+            isTracking: false,
+            showDebug: false,
+            lastFacePosition: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
+            lastBodyPosition: [],
+            smoothingLevel: 0.7,
+            mouthOpenness: 0
+        };
+
+        // MediaPipe objects
+        let camera = null;
+        let pose = null;
+        let faceMesh = null;
+
+        // Initialize the application
+        async function initApp() {
+            // Set up canvas
+            setupCanvas();
             
-            let camera;
-            let pose;
-            let lastFrameTime = 0;
-            let isTracking = false;
-            
-            // Set up canvas size
-            function setupCanvas() {
-                canvas.width = video.videoWidth || 640;
-                canvas.height = video.videoHeight || 480;
+            // Initialize tracking models
+            try {
+                await setupTrackingSystem();
+                elements.debugInfo.textContent = 'Status: Ready! Click "Start Camera" to begin.';
+                elements.loadingScreen.style.display = 'none';
+            } catch (error) {
+                console.error('Error initializing tracking:', error);
+                elements.debugInfo.textContent = `Error: ${error.message}`;
+                elements.loadingScreen.style.display = 'none';
             }
             
-            // Initialize MediaPipe Pose
-            function initializePose() {
-                status.textContent = 'Loading MediaPipe Pose...';
+            // Add event listeners
+            elements.startButton.addEventListener('click', startCamera);
+            elements.stopButton.addEventListener('click', stopTracking);
+            elements.toggleDebug.addEventListener('click', toggleDebugView);
+        }
+
+        // Set up canvas size
+        function setupCanvas() {
+            const resizeCanvas = () => {
+                elements.canvas.width = window.innerWidth;
+                elements.canvas.height = window.innerHeight;
                 
-                pose = new Pose({
-                    locateFile: (file) => {
-                        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-                    }
-                });
+                // Update SVG viewBox
+                document.getElementById('avatarSVG').setAttribute('viewBox', `0 0 ${elements.canvas.width} ${elements.canvas.height}`);
                 
-                // Set options
-                pose.setOptions({
-                    modelComplexity: 1,
-                    smoothLandmarks: true,
-                    enableSegmentation: false,
-                    smoothSegmentation: false,
-                    minDetectionConfidence: 0.5,
-                    minTrackingConfidence: 0.5
-                });
-                
-                // Set result handler
-                pose.onResults(onPoseResults);
-                
-                status.textContent = 'MediaPipe initialized!';
-                return true;
-            }
+                // Center avatar
+                avatar.group.setAttribute('transform', `translate(${elements.canvas.width/2}, ${elements.canvas.height/2})`);
+            };
             
-            // Handle pose detection results
-            function onPoseResults(results) {
-                // Calculate FPS
-                const now = Date.now();
-                const fps = Math.round(1000 / (now - (lastFrameTime || now)));
-                debugInfo.textContent = `FPS: ${fps} | Tracking: ${results.poseLandmarks ? 'Active' : 'Waiting'}`;
-                lastFrameTime = now;
-                
-                // Clear the canvas
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
-                // Draw the detection results
-                if (results.poseLandmarks) {
-                    drawPose(results);
+            // Initial setup
+            resizeCanvas();
+            
+            // Re-adjust on resize
+            window.addEventListener('resize', resizeCanvas);
+        }
+
+        // Set up tracking system
+        async function setupTrackingSystem() {
+            elements.debugInfo.textContent = 'Status: Loading MediaPipe models...';
+            
+            // Initialize Pose
+            pose = new Pose({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
                 }
-            }
+            });
             
-            // Draw the pose landmarks and connections
-            function drawPose(results) {
-                // Draw the pose landmarks
-                drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, 
-                    {color: '#00FF00', lineWidth: 2});
-                
-                // Draw the pose landmarks
-                drawLandmarks(ctx, results.poseLandmarks,
-                    {color: '#FF0000', lineWidth: 1, radius: 3});
-                
-                // Draw face landmarks in different color
-                drawLandmarks(ctx, results.poseLandmarks.slice(0, 11),
-                    {color: '#FFFF00', lineWidth: 1, radius: 3});
-            }
+            // Set pose options for better performance
+            pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
             
-            // Start camera and pose detection
-            function startTracking() {
-                if (!initializePose()) return;
-                
-                // Initialize camera
-                camera = new Camera(video, {
+            // Initialize Face Mesh
+            faceMesh = new FaceMesh({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                }
+            });
+            
+            // Set face mesh options
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            // Set up result handlers
+            pose.onResults(onPoseResults);
+            faceMesh.onResults(onFaceMeshResults);
+            
+            elements.debugInfo.textContent = 'Status: MediaPipe models loaded';
+            return true;
+        }
+
+        // Start camera
+        async function startCamera() {
+            try {
+                // Set up camera with MediaPipe Camera Utils
+                camera = new Camera(elements.video, {
                     onFrame: async () => {
-                        if (isTracking) {
-                            await pose.send({image: video});
+                        if (state.isTracking) {
+                            await pose.send({image: elements.video});
+                            await faceMesh.send({image: elements.video});
                         }
                     },
                     width: 1280,
@@ -191,39 +348,442 @@
                 });
                 
                 // Start camera
-                camera.start()
-                    .then(() => {
-                        isTracking = true;
-                        setupCanvas();
-                        status.style.display = 'none';
-                        startButton.disabled = true;
-                        stopButton.disabled = false;
-                    })
-                    .catch(error => {
-                        console.error('Error starting camera:', error);
-                        status.textContent = `Camera error: ${error.message}`;
-                    });
-            }
-            
-            // Stop tracking
-            function stopTracking() {
-                isTracking = false;
-                if (camera) {
-                    camera.stop();
-                }
-                startButton.disabled = false;
-                stopButton.disabled = true;
-                status.style.display = 'block';
-                status.textContent = 'Tracking stopped';
+                await camera.start();
                 
-                // Clear canvas
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // Update state and UI
+                state.isTracking = true;
+                elements.startButton.disabled = true;
+                elements.stopButton.disabled = false;
+                elements.debugInfo.textContent = 'Status: Tracking Active';
+                
+                // Make sure background stays visible
+                elements.background.setAttribute('fill', 'rgba(0,0,0,0.1)');
+            } catch (error) {
+                console.error('Error starting camera:', error);
+                elements.debugInfo.textContent = `Camera error: ${error.message}`;
+            }
+        }
+
+        // Stop tracking
+        function stopTracking() {
+            // Stop camera
+            if (camera) {
+                camera.stop();
             }
             
-            // Event listeners
-            startButton.addEventListener('click', startTracking);
-            stopButton.addEventListener('click', stopTracking);
-        });
+            // Update state and UI
+            state.isTracking = false;
+            elements.startButton.disabled = false;
+            elements.stopButton.disabled = true;
+            elements.debugInfo.textContent = 'Status: Tracking Stopped';
+            
+            // Reset avatar
+            resetAvatarPosition();
+        }
+
+        // Toggle debug view
+        function toggleDebugView() {
+            state.showDebug = !state.showDebug;
+            elements.video.style.opacity = state.showDebug ? '0.7' : '0.2';
+            elements.toggleDebug.textContent = state.showDebug ? 'Hide Debug' : 'Show Debug';
+        }
+
+        // Handle pose detection results
+        function onPoseResults(results) {
+            if (!state.isTracking) return;
+            
+            // If we got pose landmarks, process them
+            if (results.poseLandmarks) {
+                processBodyPose(results.poseLandmarks);
+            }
+            
+            // Draw debug visualization if enabled
+            if (state.showDebug) {
+                elements.ctx.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
+                drawConnectors(elements.ctx, results.poseLandmarks, POSE_CONNECTIONS, 
+                    {color: '#00FF00', lineWidth: 2});
+                drawLandmarks(elements.ctx, results.poseLandmarks, 
+                    {color: '#FF0000', lineWidth: 1, radius: 3});
+            }
+        }
+
+        // Handle face mesh results
+        function onFaceMeshResults(results) {
+            if (!state.isTracking) return;
+            
+            // If we got face landmarks, process them
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                processFaceMesh(results.multiFaceLandmarks[0]);
+            }
+            
+            // Draw debug visualization if enabled
+            if (state.showDebug && results.multiFaceLandmarks) {
+                for (const landmarks of results.multiFaceLandmarks) {
+                    drawConnectors(elements.ctx, landmarks, FACEMESH_TESSELATION, 
+                        {color: '#C0C0C070', lineWidth: 1});
+                    drawConnectors(elements.ctx, landmarks, FACEMESH_RIGHT_EYE, 
+                        {color: '#FF3030', lineWidth: 1});
+                    drawConnectors(elements.ctx, landmarks, FACEMESH_LEFT_EYE, 
+                        {color: '#30FF30', lineWidth: 1});
+                    drawConnectors(elements.ctx, landmarks, FACEMESH_FACE_OVAL, 
+                        {color: '#E0E0E0', lineWidth: 1});
+                    drawConnectors(elements.ctx, landmarks, FACEMESH_LIPS, 
+                        {color: '#E0E0E0', lineWidth: 1});
+                }
+            }
+        }
+
+        // Process body pose data
+        function processBodyPose(landmarks) {
+            // Map MediaPipe pose landmarks to our expected format
+            const keypoints = [];
+            
+            // Convert normalized coordinates to pixel coordinates
+            for (let i = 0; i < landmarks.length; i++) {
+                keypoints.push({
+                    x: landmarks[i].x * elements.canvas.width,
+                    y: landmarks[i].y * elements.canvas.height,
+                    z: landmarks[i].z,
+                    score: landmarks[i].visibility
+                });
+            }
+            
+            // Apply smoothing
+            const smoothedPose = applySmoothing(keypoints, state.lastBodyPosition, state.smoothingLevel);
+            state.lastBodyPosition = smoothedPose;
+            
+            // Update avatar body
+            updateAvatarBody(smoothedPose);
+            
+            // Update debug info
+            if (state.showDebug) {
+                elements.debugInfo.textContent = `Pose detected: ${smoothedPose.length} points
+Left Shoulder: ${Math.round(smoothedPose[11]?.x)}, ${Math.round(smoothedPose[11]?.y)}
+Right Shoulder: ${Math.round(smoothedPose[12]?.x)}, ${Math.round(smoothedPose[12]?.y)}
+Left Elbow: ${Math.round(smoothedPose[13]?.x)}, ${Math.round(smoothedPose[13]?.y)}
+Right Elbow: ${Math.round(smoothedPose[14]?.x)}, ${Math.round(smoothedPose[14]?.y)}`;
+            }
+        }
+
+        // Process face mesh data
+        function processFaceMesh(landmarks) {
+            // Convert normalized landmarks to pixel coordinates
+            const keypoints = landmarks.map(lm => ({
+                x: lm.x * elements.canvas.width,
+                y: lm.y * elements.canvas.height,
+                z: lm.z
+            }));
+            
+            // Extract face data
+            let faceData = extractFaceData(keypoints);
+            
+            // Apply smoothing
+            const smoothedFace = {
+                x: applyValueSmoothing(faceData.x, state.lastFacePosition.x, state.smoothingLevel),
+                y: applyValueSmoothing(faceData.y, state.lastFacePosition.y, state.smoothingLevel),
+                z: applyValueSmoothing(faceData.z, state.lastFacePosition.z, state.smoothingLevel),
+                rx: applyValueSmoothing(faceData.rx, state.lastFacePosition.rx, state.smoothingLevel),
+                ry: applyValueSmoothing(faceData.ry, state.lastFacePosition.ry, state.smoothingLevel),
+                rz: applyValueSmoothing(faceData.rz, state.lastFacePosition.rz, state.smoothingLevel)
+            };
+            
+            state.lastFacePosition = smoothedFace;
+            
+            // Update avatar face
+            updateAvatarFace(smoothedFace);
+            
+            // Update debug info
+            if (state.showDebug) {
+                const debugText = elements.debugInfo.textContent;
+                elements.debugInfo.textContent = `${debugText}
+                
+Face: x:${Math.round(smoothedFace.x)}, y:${Math.round(smoothedFace.y)}, z:${smoothedFace.z.toFixed(2)}
+Rotation: rx:${Math.round(smoothedFace.rx)}°, ry:${Math.round(smoothedFace.ry)}°, rz:${Math.round(smoothedFace.rz)}°
+Mouth: ${state.mouthOpenness.toFixed(2)}`;
+            }
+        }
+
+        // Extract face data from landmarks
+        function extractFaceData(keypoints) {
+            // Face mesh landmarks reference:
+            // 1: Nose tip
+            // 33, 263: Left and right eyes
+            // 61, 291: Left and right corners of mouth
+            // 0, 17: Top and bottom of mouth
+            
+            const faceData = {
+                x: 0, y: 0, z: 0,
+                rx: 0, ry: 0, rz: 0
+            };
+            
+            const centerX = elements.canvas.width / 2;
+            const centerY = elements.canvas.height / 2;
+            
+            // Face position
+            const nose = keypoints[1];
+            if (nose) {
+                faceData.x = (nose.x - centerX) / centerX * 30;
+                faceData.y = (nose.y - centerY) / centerY * 30;
+            }
+            
+            // Extract eye positions for rotations
+            const leftEye = keypoints[33];
+            const rightEye = keypoints[263];
+            
+            if (leftEye && rightEye) {
+                // Eye width for depth estimation
+                const eyeDistance = Math.sqrt(
+                    Math.pow(rightEye.x - leftEye.x, 2) + 
+                    Math.pow(rightEye.y - leftEye.y, 2)
+                );
+                
+                // Estimate depth from eye distance
+                const normalizedEyeDistance = eyeDistance / elements.canvas.width;
+                faceData.z = (normalizedEyeDistance - 0.1) * 3;
+                
+                // Roll (tilting head side to side)
+                const eyeDeltaX = rightEye.x - leftEye.x;
+                const eyeDeltaY = rightEye.y - leftEye.y;
+                faceData.rz = Math.atan2(eyeDeltaY, eyeDeltaX) * (180 / Math.PI);
+                
+                // Yaw (left-right rotation)
+                const standardEyeDistance = elements.canvas.width * 0.12;
+                const widthRatio = eyeDistance / standardEyeDistance;
+                faceData.ry = (1 - widthRatio) * 45 * Math.sign(centerX - nose.x);
+                
+                // Estimate pitch (up-down) based on vertical position of nose relative to eyes
+                const eyesMidY = (leftEye.y + rightEye.y) / 2;
+                const noseOffset = nose.y - eyesMidY;
+                faceData.rx = noseOffset / eyeDistance * 45;
+            }
+            
+            // Extract mouth openness
+            const topLip = keypoints[13];
+            const bottomLip = keypoints[14];
+            const leftMouth = keypoints[61];
+            const rightMouth = keypoints[291];
+            
+            if (topLip && bottomLip && leftMouth && rightMouth) {
+                const mouthWidth = Math.abs(rightMouth.x - leftMouth.x);
+                const mouthHeight = Math.abs(bottomLip.y - topLip.y);
+                state.mouthOpenness = Math.min(1, Math.max(0, mouthHeight / mouthWidth * 3));
+            }
+            
+            // Limit values to reasonable ranges
+            faceData.x = Math.max(-40, Math.min(40, faceData.x));
+            faceData.y = Math.max(-40, Math.min(40, faceData.y));
+            faceData.z = Math.max(-0.3, Math.min(0.3, faceData.z));
+            faceData.rx = Math.max(-30, Math.min(30, faceData.rx));
+            faceData.ry = Math.max(-40, Math.min(40, faceData.ry));
+            faceData.rz = Math.max(-20, Math.min(20, faceData.rz));
+            
+            return faceData;
+        }
+
+        // Update avatar body based on pose data
+        function updateAvatarBody(bodyPose) {
+            if (!bodyPose || bodyPose.length < 11) return;
+            
+            try {
+                // In the MediaPipe model:
+                // 11: left shoulder, 12: right shoulder
+                // 13: left elbow, 14: right elbow
+                // 15: left wrist, 16: right wrist
+                
+                // Get shoulder positions
+                let leftShoulderX = -85;
+                let rightShoulderX = 85;
+                let shoulderY = 50;
+                
+                if (bodyPose[11] && bodyPose[11].score > 0.3 && 
+                    bodyPose[12] && bodyPose[12].score > 0.3) {
+                    
+                    const centerX = elements.canvas.width / 2;
+                    const centerY = elements.canvas.height / 2;
+                    
+                    // Calculate normalized shoulder offsets
+                    leftShoulderX = -85 + ((bodyPose[11].x - centerX) / centerX) * 40;
+                    rightShoulderX = 85 + ((bodyPose[12].x - centerX) / centerX) * 40;
+                    
+                    // Calculate shoulder height
+                    const shoulderDiff = ((bodyPose[11].y + bodyPose[12].y) / 2) - centerY;
+                    shoulderY = 50 + (shoulderDiff / centerY) * 30;
+                    shoulderY = Math.max(20, Math.min(80, shoulderY));
+                    
+                    // Update shoulder positions
+                    avatar.leftShoulder.setAttribute('cx', leftShoulderX);
+                    avatar.rightShoulder.setAttribute('cx', rightShoulderX);
+                    avatar.leftShoulder.setAttribute('cy', shoulderY);
+                    avatar.rightShoulder.setAttribute('cy', shoulderY);
+                }
+                
+                // Calculate arm angles
+                let leftArmAngle = 0;
+                let rightArmAngle = 0;
+                
+                // Left arm angle
+                if (bodyPose[13] && bodyPose[13].score > 0.3 && bodyPose[11] && bodyPose[11].score > 0.3) {
+                    const dx = bodyPose[13].x - bodyPose[11].x;
+                    const dy = bodyPose[13].y - bodyPose[11].y;
+                    leftArmAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+                    leftArmAngle = Math.max(-80, Math.min(80, leftArmAngle));
+                } else {
+                    leftArmAngle = Math.sin(Date.now() / 1500) * 5;
+                }
+                
+                // Right arm angle
+                if (bodyPose[14] && bodyPose[14].score > 0.3 && bodyPose[12] && bodyPose[12].score > 0.3) {
+                    const dx = bodyPose[14].x - bodyPose[12].x;
+                    const dy = bodyPose[14].y - bodyPose[12].y;
+                    rightArmAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+                    rightArmAngle = Math.max(-80, Math.min(80, rightArmAngle));
+                } else {
+                    rightArmAngle = -Math.sin(Date.now() / 1500) * 5;
+                }
+                
+                // Update arm positions
+                avatar.leftArm.setAttribute('transform', `rotate(${leftArmAngle}, ${leftShoulderX}, ${shoulderY})`);
+                avatar.rightArm.setAttribute('transform', `rotate(${rightArmAngle}, ${rightShoulderX}, ${shoulderY})`);
+                
+                // Torso rotation based on shoulder alignment
+                let torsoRotation = 0;
+                if (bodyPose[11] && bodyPose[11].score > 0.3 && bodyPose[12] && bodyPose[12].score > 0.3) {
+                    const dx = bodyPose[12].x - bodyPose[11].x;
+                    const dy = bodyPose[12].y - bodyPose[11].y;
+                    torsoRotation = Math.atan2(dy, dx) * (180 / Math.PI);
+                    torsoRotation = Math.max(-15, Math.min(15, torsoRotation));
+                }
+                
+                // Add breathing effect
+                const breathingRate = 3000;
+                const breatheDepth = 0.025;
+                const breathe = Math.sin(Date.now() / breathingRate);
+                const torsoScale = 1 + breathe * breatheDepth;
+                
+                // Apply to torso
+                avatar.upperBody.setAttribute('transform', `scale(${torsoScale}) rotate(${torsoRotation})`);
+            } catch (error) {
+                console.error('Error updating avatar body:', error);
+            }
+        }
+
+        // Update avatar face based on face data
+        function updateAvatarFace(faceData) {
+            try {
+                // Apply transformations to head
+                avatar.head.setAttribute('transform', 
+                    `translate(${faceData.x}, ${faceData.y}) ` +
+                    `scale(${1 + faceData.z}) rotate(${faceData.rz})`
+                );
+                
+                // Update eye shapes based on vertical rotation
+                const eyeScaleY = 1 - (faceData.rx / 30) * 0.5;
+                avatar.leftEye.setAttribute('ry', 15 * Math.max(0.4, Math.min(1.2, eyeScaleY)));
+                avatar.rightEye.setAttribute('ry', 15 * Math.max(0.4, Math.min(1.2, eyeScaleY)));
+                
+                // Eye gaze follows head turn
+                const eyeShiftX = faceData.ry * 0.25;
+                avatar.leftEye.setAttribute('cx', -25 - eyeShiftX);
+                avatar.rightEye.setAttribute('cx', 25 - eyeShiftX);
+                
+                // Add blinking
+                const blinkRate = 5000;
+                const blinkLength = 150;
+                const randomOffset = Math.sin(Date.now() / 9777) * 2000;
+                const timeSinceBlink = (Date.now() + randomOffset) % blinkRate;
+                
+                if (timeSinceBlink < blinkLength) {
+                    const blinkProgress = timeSinceBlink / blinkLength;
+                    const blinkAmount = Math.sin(blinkProgress * Math.PI);
+                    const eyeOpenness = 1 - blinkAmount * 0.9;
+                    
+                    avatar.leftEye.setAttribute('ry', 15 * eyeScaleY * eyeOpenness);
+                    avatar.rightEye.setAttribute('ry', 15 * eyeScaleY * eyeOpenness);
+                }
+                
+                // Eyebrow expressions
+                const baseEyebrowY = -70;
+                const eyebrowExpression = Math.sin(Date.now() / 2500) * 5;
+                
+                const leftEyebrowTilt = faceData.rz * 0.35 + faceData.ry * 0.15;
+                const rightEyebrowTilt = -faceData.rz * 0.35 - faceData.ry * 0.15;
+                
+                const eyebrowYOffset = -faceData.rx * 0.4;
+                
+                const leftEyebrowYPos = baseEyebrowY + eyebrowExpression + eyebrowYOffset;
+                const leftEyebrowPath = `M-40 ${leftEyebrowYPos + leftEyebrowTilt} L-10 ${leftEyebrowYPos - leftEyebrowTilt}`;
+                avatar.leftEyebrow.setAttribute('d', leftEyebrowPath);
+                
+                const rightEyebrowYPos = baseEyebrowY + eyebrowExpression + eyebrowYOffset;
+                const rightEyebrowPath = `M10 ${rightEyebrowYPos + rightEyebrowTilt} L40 ${rightEyebrowYPos - rightEyebrowTilt}`;
+                avatar.rightEyebrow.setAttribute('d', rightEyebrowPath);
+                
+                // Mouth animation based on detected openness
+                const time = Date.now();
+                const mouthOpenness = state.mouthOpenness;
+                
+                if (mouthOpenness > 0.2) {
+                    // Talking animation
+                    const baseRY = 4 + (mouthOpenness * 10);
+                    const baseRX = 20 - (mouthOpenness * 5);
+                    
+                    avatar.mouth.setAttribute('ry', baseRY);
+                    avatar.mouth.setAttribute('rx', baseRX);
+                } else {
+                    // Subtle breathing animation
+                    const breatheSpeed = 3000;
+                    const breathe = Math.sin(time / breatheSpeed) * 0.3 + 0.7;
+                    avatar.mouth.setAttribute('ry', 4 * breathe);
+                    avatar.mouth.setAttribute('rx', 20);
+                }
+            } catch (error) {
+                console.error('Error updating avatar face:', error);
+            }
+        }
+
+        // Reset avatar position
+        function resetAvatarPosition() {
+            if (!avatar.group || !avatar.head) return;
+            
+            avatar.group.setAttribute('transform', `translate(${elements.canvas.width/2}, ${elements.canvas.height/2})`);
+            avatar.head.setAttribute('transform', 'translate(0, 0) scale(1) rotate(0)');
+            avatar.leftEye.setAttribute('ry', 15);
+            avatar.rightEye.setAttribute('ry', 15);
+            avatar.leftEye.setAttribute('cx', -25);
+            avatar.rightEye.setAttribute('cx', 25);
+            avatar.leftEyebrow.setAttribute('d', 'M-40 -70 L-10 -70');
+            avatar.rightEyebrow.setAttribute('d', 'M10 -70 L40 -70');
+            avatar.mouth.setAttribute('ry', 8);
+            avatar.mouth.setAttribute('rx', 20);
+            avatar.leftArm.setAttribute('transform', 'rotate(0, -85, 50)');
+            avatar.rightArm.setAttribute('transform', 'rotate(0, 85, 50)');
+            avatar.upperBody.setAttribute('transform', 'scale(1)');
+        }
+
+        // Apply smoothing to array of points
+        function applySmoothing(newPoints, oldPoints, smoothingFactor) {
+            if (!Array.isArray(oldPoints) || oldPoints.length === 0) return newPoints;
+            
+            return newPoints.map((point, i) => {
+                if (i >= oldPoints.length || !oldPoints[i] || !point) return point;
+                
+                return {
+                    x: oldPoints[i].x * smoothingFactor + point.x * (1 - smoothingFactor),
+                    y: oldPoints[i].y * smoothingFactor + point.y * (1 - smoothingFactor),
+                    z: point.z,
+                    score: point.score || oldPoints[i].score
+                };
+            });
+        }
+
+        // Apply smoothing to single value
+        function applyValueSmoothing(newValue, oldValue, smoothingFactor) {
+            if (oldValue === undefined) return newValue;
+            return oldValue * smoothingFactor + newValue * (1 - smoothingFactor);
+        }
+
+        // Start the application
+        window.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
 </html>
