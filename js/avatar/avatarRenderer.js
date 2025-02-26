@@ -169,7 +169,7 @@ export function updateAvatarFace(faceData) {
     }
 }
 
-// Update avatar body based on detected pose
+// Enhanced updateAvatarBody function to better respond to tracking data
 export function updateAvatarBody(bodyPose) {
     if (!bodyPose || bodyPose.length < 5 || !leftArm || !rightArm || !upperBody) return;
     
@@ -248,44 +248,6 @@ export function updateAvatarBody(bodyPose) {
             rightArmAngle = -Math.sin(Date.now() / 1000) * 10;
         }
         
-        // Enhanced forearm positioning
-        let leftForearmAngle = 0;
-        let rightForearmAngle = 0;
-        
-        // Left forearm
-        if (bodyPose[9] && bodyPose[9].score > 0.5 && bodyPose[7] && bodyPose[7].score > 0.5) {
-            // Vector from elbow to wrist
-            const dx = bodyPose[9].x - bodyPose[7].x;
-            const dy = bodyPose[9].y - bodyPose[7].y;
-            
-            // Calculate angle relative to elbow
-            leftForearmAngle = Math.atan2(dy, dx) * (180 / Math.PI) - leftArmAngle;
-            
-            // Constrain to reasonable range
-            leftForearmAngle = Math.max(-45, Math.min(45, leftForearmAngle));
-            
-            // Apply transformation to forearm
-            document.getElementById('leftForearm').setAttribute('transform', 
-                `rotate(${leftForearmAngle}, -110, 130)`);
-        }
-        
-        // Right forearm
-        if (bodyPose[10] && bodyPose[10].score > 0.5 && bodyPose[8] && bodyPose[8].score > 0.5) {
-            // Vector from elbow to wrist
-            const dx = bodyPose[10].x - bodyPose[8].x;
-            const dy = bodyPose[10].y - bodyPose[8].y;
-            
-            // Calculate angle relative to elbow
-            rightForearmAngle = Math.atan2(dy, dx) * (180 / Math.PI) - rightArmAngle;
-            
-            // Constrain to reasonable range
-            rightForearmAngle = Math.max(-45, Math.min(45, rightForearmAngle));
-            
-            // Apply transformation to forearm
-            document.getElementById('rightForearm').setAttribute('transform', 
-                `rotate(${rightForearmAngle}, 110, 130)`);
-        }
-        
         // Update arm positions
         leftArm.setAttribute('transform', `rotate(${leftArmAngle}, ${leftShoulderX}, ${shoulderY})`);
         rightArm.setAttribute('transform', `rotate(${rightArmAngle}, ${rightShoulderX}, ${shoulderY})`);
@@ -314,7 +276,7 @@ export function updateAvatarBody(bodyPose) {
         if (bodyPose[0] && bodyPose[0].score > 0.5) {
             const neck = document.getElementById('neck');
             if (neck) {
-                const neckY = shoulderY - 30; // Position neck above shoulders
+                const neckY = Math.min(0, shoulderY - 30); // Position neck above shoulders but not too high
                 neck.setAttribute('y', neckY);
             }
         }
@@ -327,7 +289,7 @@ export function updateAvatarBody(bodyPose) {
     }
 }
 
-// Enhanced face tracking
+// Enhanced updateAvatarFace function for better face tracking
 export function updateAvatarFace(faceData) {
     if (!head || !leftEye || !rightEye || !mouth || !leftEyebrow || !rightEyebrow) return;
     
@@ -369,23 +331,19 @@ export function updateAvatarFace(faceData) {
         const rightEyebrowPath = `M10 ${rightEyebrowYPos + rightEyebrowTilt} L40 ${rightEyebrowYPos - rightEyebrowTilt}`;
         rightEyebrow.setAttribute('d', rightEyebrowPath);
         
-        // Improved mouth animation - looks more natural
+        // Check for head movement (used to detect speaking)
+        const headMovement = Math.abs(faceData.x) + Math.abs(faceData.y);
         const time = Date.now();
         
-        // Check if head is moving significantly (indicating speech)
-        const headMovement = Math.abs(faceData.x - lastFacePosition.x) + 
-                           Math.abs(faceData.y - lastFacePosition.y);
-        
-        const isTalking = headMovement > 0.5 || (time % 4000) < 2000; // More dynamic talking detection
+        // Determine if "talking" based on head movement or timer
+        const isTalking = headMovement > 1.5 || (time % 4000) < 2000;
         
         if (isTalking) {
-            // Dynamic talking speed based on movement
-            const talkSpeed = Math.max(100, 300 - headMovement * 200);
-            
-            // Realistic mouth movement
+            // Dynamic talking animation
+            const talkSpeed = Math.max(150, 300 - headMovement * 100);
             const mouthOpen = Math.sin(time / talkSpeed) * 0.5 + 0.5; // 0 to 1 value
-            mouth.setAttribute('ry', 4 + (mouthOpen * 10)); // More pronounced vertical mouth movement
-            mouth.setAttribute('rx', 20 - (mouthOpen * 7)); // Width changes with talking
+            mouth.setAttribute('ry', 4 + (mouthOpen * 10)); // More pronounced mouth movement
+            mouth.setAttribute('rx', 20 - (mouthOpen * 5)); // Width changes with talking
         } else {
             // Subtle breathing/idle movement when not talking
             const breatheSpeed = 2000;
