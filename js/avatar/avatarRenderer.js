@@ -169,7 +169,6 @@ export function updateAvatarFace(faceData) {
     }
 }
 
-// Enhanced updateAvatarBody function to better respond to tracking data
 export function updateAvatarBody(bodyPose) {
     if (!bodyPose || bodyPose.length < 5 || !leftArm || !rightArm || !upperBody) return;
     
@@ -289,7 +288,6 @@ export function updateAvatarBody(bodyPose) {
     }
 }
 
-// Enhanced updateAvatarFace function for better face tracking
 export function updateAvatarFace(faceData) {
     if (!head || !leftEye || !rightEye || !mouth || !leftEyebrow || !rightEyebrow) return;
     
