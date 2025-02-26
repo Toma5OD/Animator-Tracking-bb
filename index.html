@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Anonymous Avatar Tracking</title>
+    
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/controls.css">
+    <link rel="stylesheet" href="css/loading.css">
+    
+    <!-- TensorFlow.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.4.0/dist/tf.min.js"></script>
+    
+    <!-- For UI controls if needed -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js"></script>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loadingScreen">
+        <div class="loader"></div>
+        <h2>Loading Tracking Models...</h2>
+        <p>This may take a moment depending on your connection speed.</p>
+    </div>
+
+    <div id="container">
+        <video id="videoElement" playsinline autoplay></video>
+        <canvas id="canvasOutput"></canvas>
+        
+        <!-- SVG Avatar - This will be loaded via JavaScript -->
+        <div id="avatarContainer"></div>
+        
+        <div id="recordingIndicator">● REC</div>
+        
+        <div id="controls">
+            <button id="startButton">Start Camera</button>
+            <button id="recordButton" disabled>Start Recording</button>
+            <button id="stopButton" disabled>Stop Tracking</button>
+            <button id="fileUploadBtn">Process Video File</button>
+            <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
+        </div>
+        
+        <div id="debugInfo">Status: Ready to start</div>
+        
+        <div id="settingsPanel">
+            <div class="setting-group">
+                <label for="bgSelect">Background Style:</label>
+                <select id="bgSelect">
+                    <option value="cityscape">Urban Cityscape</option>
+                    <option value="abstract">Abstract Waves</option>
+                    <option value="irish">Irish Themed</option>
+                    <option value="matrix">Digital Matrix</option>
+                    <option value="particles">Particle System</option>
+                </select>
+            </div>
+            
+            <div class="setting-group">
+                <label for="avatarScale">Avatar Size:</label>
+                <input type="range" id="avatarScale" min="0.5" max="1.5" step="0.1" value="1">
+            </div>
+            
+            <div class="setting-group">
+                <label for="smoothingLevel">Motion Smoothing:</label>
+                <input type="range" id="smoothingLevel" min="0" max="0.95" step="0.05" value="0.7">
+            </div>
+            
+            <div class="setting-group">
+                <label for="displayMode">Video Display:</label>
+                <select id="displayMode">
+                    <option value="avatarOnly">Avatar Only</option>
+                    <option value="debug">Debug View</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main JavaScript Module (loads other modules) -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
