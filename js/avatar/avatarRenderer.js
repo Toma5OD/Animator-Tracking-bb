@@ -116,59 +116,7 @@ function createAvatarSVG() {
     `;
 }
 
-// Update avatar face based on detected face data
-export function updateAvatarFace(faceData) {
-    if (!head || !leftEye || !rightEye || !mouth || !leftEyebrow || !rightEyebrow) return;
-    
-    // Apply transformations to head element
-    head.setAttribute('transform', 
-        `translate(${faceData.x}, ${faceData.y}) scale(${1 + faceData.z}) rotate(${faceData.rz})`
-    );
-    
-    // Update eye shapes based on vertical head rotation (looking up/down)
-    // When looking up, eyes get more open, when looking down, they get more closed
-    const eyeScaleY = 1 - (faceData.rx / 45) * 0.5;
-    leftEye.setAttribute('ry', 15 * Math.max(0.5, Math.min(1.2, eyeScaleY)));
-    rightEye.setAttribute('ry', 15 * Math.max(0.5, Math.min(1.2, eyeScaleY)));
-    
-    // Horizontal eye movement for gaze direction (follows head turn)
-    const eyeShiftX = faceData.ry * 0.2; // Subtle eye movement
-    leftEye.setAttribute('cx', -25 - eyeShiftX);
-    rightEye.setAttribute('cx', 25 - eyeShiftX);
-    
-    // Move eyebrows with expressions
-    // Eyebrows go up for surprise, down for anger/concentration
-    const baseEyebrowY = -70;
-    const eyebrowExpression = Math.sin(Date.now() / 3000) * 5;  // Subtle expression changes
-    const eyebrowYPos = baseEyebrowY + eyebrowExpression + (faceData.rx * 0.2); // Move with head tilt
-    
-    // Left eyebrow
-    const leftEyebrowPath = `M-40 ${eyebrowYPos} L-10 ${eyebrowYPos + (faceData.rz * 0.2)}`; // Add tilt effect
-    leftEyebrow.setAttribute('d', leftEyebrowPath);
-    
-    // Right eyebrow
-    const rightEyebrowPath = `M10 ${eyebrowYPos - (faceData.rz * 0.2)} L40 ${eyebrowYPos}`; // Add tilt effect
-    rightEyebrow.setAttribute('d', rightEyebrowPath);
-    
-    // Update mouth for speech/expression simulation
-    const time = Date.now();
-    const isTalking = (time % 5000) < 2500; // Toggle talking every 2.5 seconds
-    
-    if (isTalking) {
-        // Talking animation - mouth opens and closes
-        const talkSpeed = 200; // Speed of mouth movement
-        const mouthOpen = Math.sin(time / talkSpeed) * 0.5 + 0.5; // 0 to 1 value
-        mouth.setAttribute('ry', 5 + (mouthOpen * 8)); // Mouth height changes
-        mouth.setAttribute('rx', 20 - (mouthOpen * 5)); // Width changes slightly too
-    } else {
-        // Subtle breathing/idle movement when not talking
-        const breatheSpeed = 2000;
-        const breathe = Math.sin(time / breatheSpeed) * 0.3 + 0.7; // 0.4 to 1 value
-        mouth.setAttribute('ry', 5 * breathe);
-        mouth.setAttribute('rx', 20);
-    }
-}
-
+// Update avatar body implementation
 export function updateAvatarBody(bodyPose) {
     if (!bodyPose || bodyPose.length < 5 || !leftArm || !rightArm || !upperBody) return;
     
@@ -288,6 +236,7 @@ export function updateAvatarBody(bodyPose) {
     }
 }
 
+// Update avatar face implementation
 export function updateAvatarFace(faceData) {
     if (!head || !leftEye || !rightEye || !mouth || !leftEyebrow || !rightEyebrow) return;
     

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaPipe Tracking Test</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: white;
+        }
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #videoElement {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror for more intuitive interaction */
+        }
+        #canvasOutput {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #debugInfo {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        #status {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 24px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <video id="videoElement" playsinline autoplay></video>
+        <canvas id="canvasOutput"></canvas>
+        <div id="debugInfo">FPS: 0</div>
+        <div id="status">Click Start Camera to begin tracking test</div>
+        <div id="controls">
+            <button id="startButton">Start Camera</button>
+            <button id="stopButton" disabled>Stop</button>
+        </div>
+    </div>
+
+    <!-- Import MediaPipe libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const video = document.getElementById('videoElement');
+            const canvas = document.getElementById('canvasOutput');
+            const ctx = canvas.getContext('2d');
+            const startButton = document.getElementById('startButton');
+            const stopButton = document.getElementById('stopButton');
+            const debugInfo = document.getElementById('debugInfo');
+            const status = document.getElementById('status');
+            
+            let camera;
+            let pose;
+            let lastFrameTime = 0;
+            let isTracking = false;
+            
+            // Set up canvas size
+            function setupCanvas() {
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+            }
+            
+            // Initialize MediaPipe Pose
+            function initializePose() {
+                status.textContent = 'Loading MediaPipe Pose...';
+                
+                pose = new Pose({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+                    }
+                });
+                
+                // Set options
+                pose.setOptions({
+                    modelComplexity: 1,
+                    smoothLandmarks: true,
+                    enableSegmentation: false,
+                    smoothSegmentation: false,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+                
+                // Set result handler
+                pose.onResults(onPoseResults);
+                
+                status.textContent = 'MediaPipe initialized!';
+                return true;
+            }
+            
+            // Handle pose detection results
+            function onPoseResults(results) {
+                // Calculate FPS
+                const now = Date.now();
+                const fps = Math.round(1000 / (now - (lastFrameTime || now)));
+                debugInfo.textContent = `FPS: ${fps} | Tracking: ${results.poseLandmarks ? 'Active' : 'Waiting'}`;
+                lastFrameTime = now;
+                
+                // Clear the canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw the detection results
+                if (results.poseLandmarks) {
+                    drawPose(results);
+                }
+            }
+            
+            // Draw the pose landmarks and connections
+            function drawPose(results) {
+                // Draw the pose landmarks
+                drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, 
+                    {color: '#00FF00', lineWidth: 2});
+                
+                // Draw the pose landmarks
+                drawLandmarks(ctx, results.poseLandmarks,
+                    {color: '#FF0000', lineWidth: 1, radius: 3});
+                
+                // Draw face landmarks in different color
+                drawLandmarks(ctx, results.poseLandmarks.slice(0, 11),
+                    {color: '#FFFF00', lineWidth: 1, radius: 3});
+            }
+            
+            // Start camera and pose detection
+            function startTracking() {
+                if (!initializePose()) return;
+                
+                // Initialize camera
+                camera = new Camera(video, {
+                    onFrame: async () => {
+                        if (isTracking) {
+                            await pose.send({image: video});
+                        }
+                    },
+                    width: 1280,
+                    height: 720
+                });
+                
+                // Start camera
+                camera.start()
+                    .then(() => {
+                        isTracking = true;
+                        setupCanvas();
+                        status.style.display = 'none';
+                        startButton.disabled = true;
+                        stopButton.disabled = false;
+                    })
+                    .catch(error => {
+                        console.error('Error starting camera:', error);
+                        status.textContent = `Camera error: ${error.message}`;
+                    });
+            }
+            
+            // Stop tracking
+            function stopTracking() {
+                isTracking = false;
+                if (camera) {
+                    camera.stop();
+                }
+                startButton.disabled = false;
+                stopButton.disabled = true;
+                status.style.display = 'block';
+                status.textContent = 'Tracking stopped';
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            // Event listeners
+            startButton.addEventListener('click', startTracking);
+            stopButton.addEventListener('click', stopTracking);
+        });
+    </script>
+</body>
+</html>

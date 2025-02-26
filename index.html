@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Anonymous Avatar Tracking</title>
+    <title>Advanced Anonymous Avatar Tracking with MediaPipe</title>
     
-    <!-- Stylesheets - Use correct naming -->
+    <!-- Stylesheets -->
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/controls.css">
     <link rel="stylesheet" href="css/loading.css">
@@ -13,20 +13,20 @@
     <!-- TensorFlow.js Library -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.4.0/dist/tf.min.js"></script>
     
-    <!-- PoseNet Library - Add this for body tracking -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet@2.2.2/dist/posenet.min.js"></script>
+    <!-- MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.0.0/dist/pose-detection.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection@1.0.2/dist/face-landmarks-detection.min.js"></script>
     
-    <!-- Face-API.js - Add this for face tracking -->
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-    
-    <!-- For UI controls if needed -->
+    <!-- Additional UI Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js"></script>
 </head>
 <body>
     <!-- Loading Screen -->
     <div id="loadingScreen">
         <div class="loader"></div>
-        <h2>Loading Tracking Models...</h2>
+        <h2>Loading MediaPipe Models...</h2>
         <p>This may take a moment depending on your connection speed.</p>
     </div>
 
