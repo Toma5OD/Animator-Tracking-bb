@@ -116,12 +116,11 @@ function createAvatarSVG() {
     `;
 }
 
-// Update avatar body implementation
 export function updateAvatarBody(bodyPose) {
     if (!bodyPose || bodyPose.length < 5 || !leftArm || !rightArm || !upperBody) return;
     
     try {
-        // In the PoseNet model, keypoints are:
+        // In the MediaPipe model, keypoints are:
         // 0: nose, 1: leftEye, 2: rightEye, 3: leftEar, 4: rightEar,
         // 5: leftShoulder, 6: rightShoulder, 7: leftElbow, 8: rightElbow,
         // 9: leftWrist, 10: rightWrist, 11: leftHip, 12: rightHip,
@@ -133,8 +132,8 @@ export function updateAvatarBody(bodyPose) {
         let shoulderY = 50;
         
         // If we have valid shoulder detections, use them
-        if (bodyPose[5] && bodyPose[5].score > 0.5 && 
-            bodyPose[6] && bodyPose[6].score > 0.5) {
+        if (bodyPose[5] && bodyPose[5].score > 0.3 && 
+            bodyPose[6] && bodyPose[6].score > 0.3) {
             
             // Get video dimensions for normalization
             const videoWidth = elements.canvas.width;
@@ -144,13 +143,23 @@ export function updateAvatarBody(bodyPose) {
             const centerX = videoWidth / 2;
             const centerY = videoHeight / 2;
             
-            // Map detected shoulder positions to avatar coordinates
-            leftShoulderX = -85 + ((bodyPose[5].x - centerX) / centerX) * 30;
-            rightShoulderX = 85 + ((bodyPose[6].x - centerX) / centerX) * 30;
+            // Calculate shoulder midpoint for better centering
+            const shoulderMidX = (bodyPose[5].x + bodyPose[6].x) / 2;
+            const shoulderMidY = (bodyPose[5].y + bodyPose[6].y) / 2;
             
-            // Calculate shoulder height
-            const shoulderDiff = (bodyPose[5].y + bodyPose[6].y) / 2 - centerY;
-            shoulderY = 50 + (shoulderDiff / centerY) * 20;
+            // Calculate shoulder width for better scaling
+            const shoulderWidth = Math.abs(bodyPose[6].x - bodyPose[5].x);
+            const shoulderScaleFactor = Math.min(1.5, Math.max(0.5, 170 / shoulderWidth)); // 170 is avatar shoulder width
+            
+            // Map detected shoulder positions to avatar coordinates with improved scaling
+            // The offset calculation now uses the difference from shoulder midpoint
+            leftShoulderX = -85 + ((bodyPose[5].x - shoulderMidX) / (shoulderWidth/2)) * 40;
+            rightShoulderX = 85 + ((bodyPose[6].x - shoulderMidX) / (shoulderWidth/2)) * 40;
+            
+            // Calculate shoulder height with more natural constraints
+            const shoulderDiff = shoulderMidY - centerY;
+            shoulderY = 50 + (shoulderDiff / (videoHeight/4)) * 30;
+            shoulderY = Math.max(30, Math.min(80, shoulderY)); // Limit vertical range
             
             // Update shoulder positions in the SVG
             document.getElementById('leftShoulder').setAttribute('cx', leftShoulderX);
@@ -159,12 +168,14 @@ export function updateAvatarBody(bodyPose) {
             document.getElementById('rightShoulder').setAttribute('cy', shoulderY);
         }
         
-        // Calculate arm angles based on elbow and wrist positions
+        // Calculate arm angles based on elbow and wrist positions with better constraints
         let leftArmAngle = 0;
         let rightArmAngle = 0;
+        let leftForearmAngle = 0;
+        let rightForearmAngle = 0;
         
-        // Left arm angle calculation
-        if (bodyPose[7] && bodyPose[7].score > 0.5 && bodyPose[5] && bodyPose[5].score > 0.5) {
+        // Left arm angle calculation - enhanced for accurate bending
+        if (bodyPose[7] && bodyPose[7].score > 0.3 && bodyPose[5] && bodyPose[5].score > 0.3) {
             // Vector from shoulder to elbow
             const dx = bodyPose[7].x - bodyPose[5].x;
             const dy = bodyPose[7].y - bodyPose[5].y;
@@ -172,15 +183,23 @@ export function updateAvatarBody(bodyPose) {
             // Calculate angle in degrees
             leftArmAngle = Math.atan2(dy, dx) * (180 / Math.PI);
             
-            // Constrain angle to reasonable range
-            leftArmAngle = Math.max(-60, Math.min(60, leftArmAngle));
+            // Constrain angle to reasonable range for avatar's structure
+            leftArmAngle = Math.max(-80, Math.min(80, leftArmAngle));
+            
+            // Calculate forearm angle if wrist is detected
+            if (bodyPose[9] && bodyPose[9].score > 0.3) {
+                const fDx = bodyPose[9].x - bodyPose[7].x;
+                const fDy = bodyPose[9].y - bodyPose[7].y;
+                leftForearmAngle = Math.atan2(fDy, fDx) * (180 / Math.PI) - leftArmAngle;
+                leftForearmAngle = Math.max(-90, Math.min(90, leftForearmAngle));
+            }
         } else {
-            // Fallback to subtle movement
-            leftArmAngle = Math.sin(Date.now() / 1000) * 10;
+            // Fallback to subtle movement with breathing effect
+            leftArmAngle = Math.sin(Date.now() / 1500) * 8;
         }
         
-        // Right arm angle calculation
-        if (bodyPose[8] && bodyPose[8].score > 0.5 && bodyPose[6] && bodyPose[6].score > 0.5) {
+        // Right arm angle calculation - enhanced for accurate bending
+        if (bodyPose[8] && bodyPose[8].score > 0.3 && bodyPose[6] && bodyPose[6].score > 0.3) {
             // Vector from shoulder to elbow
             const dx = bodyPose[8].x - bodyPose[6].x;
             const dy = bodyPose[8].y - bodyPose[6].y;
@@ -188,123 +207,234 @@ export function updateAvatarBody(bodyPose) {
             // Calculate angle in degrees
             rightArmAngle = Math.atan2(dy, dx) * (180 / Math.PI);
             
-            // Constrain angle to reasonable range
-            rightArmAngle = Math.max(-60, Math.min(60, rightArmAngle));
+            // Constrain angle to reasonable range for avatar's structure
+            rightArmAngle = Math.max(-80, Math.min(80, rightArmAngle));
+            
+            // Calculate forearm angle if wrist is detected
+            if (bodyPose[10] && bodyPose[10].score > 0.3) {
+                const fDx = bodyPose[10].x - bodyPose[8].x;
+                const fDy = bodyPose[10].y - bodyPose[8].y;
+                rightForearmAngle = Math.atan2(fDy, fDx) * (180 / Math.PI) - rightArmAngle;
+                rightForearmAngle = Math.max(-90, Math.min(90, rightForearmAngle));
+            }
         } else {
-            // Fallback to subtle movement
-            rightArmAngle = -Math.sin(Date.now() / 1000) * 10;
+            // Fallback to subtle movement with breathing effect but opposite phase
+            rightArmAngle = -Math.sin(Date.now() / 1500) * 8;
         }
         
-        // Update arm positions
-        leftArm.setAttribute('transform', `rotate(${leftArmAngle}, ${leftShoulderX}, ${shoulderY})`);
-        rightArm.setAttribute('transform', `rotate(${rightArmAngle}, ${rightShoulderX}, ${shoulderY})`);
+        // Update arm positions with improved animation
+        // Apply two-part articulation for more realistic arm movement
+        const leftUpperArm = document.getElementById('leftUpperArm');
+        const leftForearm = document.getElementById('leftForearm');
+        const rightUpperArm = document.getElementById('rightUpperArm');
+        const rightForearm = document.getElementById('rightForearm');
         
-        // Add torso rotation based on shoulder alignment
+        if (leftUpperArm && leftForearm) {
+            // Reset transforms first to avoid compound transformations
+            leftArm.setAttribute('transform', '');
+            
+            // Position upper arm at shoulder
+            leftUpperArm.setAttribute('transform', `rotate(${leftArmAngle}, ${leftShoulderX}, ${shoulderY})`);
+            
+            // Position forearm relative to upper arm's position and rotation
+            // Calculate elbow position after upper arm rotation
+            const elbowX = leftShoulderX + Math.cos(leftArmAngle * Math.PI / 180) * 80;
+            const elbowY = shoulderY + Math.sin(leftArmAngle * Math.PI / 180) * 80;
+            
+            leftForearm.setAttribute('transform', 
+                `translate(${elbowX - leftShoulderX}, ${elbowY - shoulderY}) ` +
+                `rotate(${leftForearmAngle}, 0, 0)`);
+        } else {
+            // Fallback if detailed arm elements not found
+            leftArm.setAttribute('transform', `rotate(${leftArmAngle}, ${leftShoulderX}, ${shoulderY})`);
+        }
+        
+        if (rightUpperArm && rightForearm) {
+            // Reset transforms first
+            rightArm.setAttribute('transform', '');
+            
+            // Position upper arm at shoulder
+            rightUpperArm.setAttribute('transform', `rotate(${rightArmAngle}, ${rightShoulderX}, ${shoulderY})`);
+            
+            // Position forearm
+            const elbowX = rightShoulderX + Math.cos(rightArmAngle * Math.PI / 180) * 80;
+            const elbowY = shoulderY + Math.sin(rightArmAngle * Math.PI / 180) * 80;
+            
+            rightForearm.setAttribute('transform', 
+                `translate(${elbowX - rightShoulderX}, ${elbowY - shoulderY}) ` +
+                `rotate(${rightForearmAngle}, 0, 0)`);
+        } else {
+            // Fallback if detailed arm elements not found
+            rightArm.setAttribute('transform', `rotate(${rightArmAngle}, ${rightShoulderX}, ${shoulderY})`);
+        }
+        
+        // Add torso rotation based on shoulder alignment with improved mechanics
         let torsoRotation = 0;
-        if (bodyPose[5] && bodyPose[5].score > 0.5 && bodyPose[6] && bodyPose[6].score > 0.5) {
+        if (bodyPose[5] && bodyPose[5].score > 0.3 && bodyPose[6] && bodyPose[6].score > 0.3) {
             // Calculate angle of line between shoulders
             const dx = bodyPose[6].x - bodyPose[5].x;
             const dy = bodyPose[6].y - bodyPose[5].y;
             torsoRotation = Math.atan2(dy, dx) * (180 / Math.PI);
             
             // Constrain rotation to reasonable range
-            torsoRotation = Math.max(-15, Math.min(15, torsoRotation));
+            torsoRotation = Math.max(-20, Math.min(20, torsoRotation));
         }
         
-        // Add breathing effect
-        const breathingRate = 2000; // Slower for natural breathing
-        const breatheDepth = 0.02;  // Subtle breathing
-        const torsoScale = 1 + Math.sin(Date.now() / breathingRate) * breatheDepth;
+        // Add breathing effect with more natural timing
+        const breathingRate = 3000; // Slower for natural breathing
+        const breatheDepth = 0.025;  // Subtle breathing
+        const breathe = Math.sin(Date.now() / breathingRate);
+        const torsoScale = 1 + breathe * breatheDepth;
         
-        // Apply transformations to torso
-        upperBody.setAttribute('transform', `scale(${torsoScale}) rotate(${torsoRotation})`);
+        // Add slight torso sway for more lifelike movement
+        const swayAmount = 0.01;
+        const swayRate = 4500;
+        const swayX = 1 + Math.sin(Date.now() / swayRate) * swayAmount;
+        const swayY = 1 + Math.cos(Date.now() / swayRate) * swayAmount;
+        
+        // Apply transformations to torso with enhanced animation
+        upperBody.setAttribute('transform', 
+            `scale(${torsoScale * swayX}, ${torsoScale * swayY}) rotate(${torsoRotation})`);
         
         // Adjust neck position based on head and shoulder positions
-        if (bodyPose[0] && bodyPose[0].score > 0.5) {
+        if (bodyPose[0] && bodyPose[0].score > 0.3) {
             const neck = document.getElementById('neck');
             if (neck) {
-                const neckY = Math.min(0, shoulderY - 30); // Position neck above shoulders but not too high
+                // Calculate appropriate neck position based on head and shoulders
+                const headY = bodyPose[0].y;
+                const shoulderMidY = (bodyPose[5] && bodyPose[6]) ? 
+                    (bodyPose[5].y + bodyPose[6].y) / 2 : shoulderY;
+                
+                // Map neck position to avatar
+                const videoHeight = elements.canvas.height;
+                const centerY = videoHeight / 2;
+                const neckY = Math.min(0, shoulderY - 30 + ((headY - shoulderMidY) / (videoHeight/8)) * 20);
+                
                 neck.setAttribute('y', neckY);
+                
+                // Adjust neck width based on head rotation for a more natural look
+                if (bodyPose[3] && bodyPose[4] && bodyPose[3].score > 0.3 && bodyPose[4].score > 0.3) {
+                    const earWidth = Math.abs(bodyPose[4].x - bodyPose[3].x);
+                    const normalEarWidth = videoHeight * 0.15;
+                    const widthRatio = Math.min(1.2, Math.max(0.8, earWidth / normalEarWidth));
+                    
+                    // Update neck width based on head rotation
+                    neck.setAttribute('width', 40 * widthRatio);
+                    neck.setAttribute('x', -20 * widthRatio);
+                }
             }
         }
     } catch (error) {
         console.error('Error updating avatar body:', error);
-        // Fallback to basic animation
+        // Graceful fallback with smooth animation
         leftArm.setAttribute('transform', `rotate(${Math.sin(Date.now() / 1000) * 5}, -85, 50)`);
         rightArm.setAttribute('transform', `rotate(${-Math.sin(Date.now() / 1000) * 5}, 85, 50)`);
-        upperBody.setAttribute('transform', `scale(${1 + Math.sin(Date.now() / 2000) * 0.02})`);
+        upperBody.setAttribute('transform', `scale(${1 + Math.sin(Date.now() / 3000) * 0.02})`);
     }
 }
 
-// Update avatar face implementation
+// Update avatar face with improved expression and movement mapping
 export function updateAvatarFace(faceData) {
     if (!head || !leftEye || !rightEye || !mouth || !leftEyebrow || !rightEyebrow) return;
     
     try {
-        // Apply transformations to head element
+        // Apply transformations to head element with more natural constraints
+        // Scale the translation values for more noticeable but not exaggerated movement
         head.setAttribute('transform', 
-            `translate(${faceData.x}, ${faceData.y}) scale(${1 + faceData.z}) rotate(${faceData.rz})`
+            `translate(${faceData.x * 1.2}, ${faceData.y * 1.2}) ` +
+            `scale(${1 + faceData.z * 1.2}) rotate(${faceData.rz * 0.8})`
         );
         
         // Update eye shapes based on vertical head rotation (looking up/down)
         // When looking up, eyes get more open, when looking down, they get more closed
-        const eyeScaleY = 1 - (faceData.rx / 45) * 0.7;
-        leftEye.setAttribute('ry', 15 * Math.max(0.3, Math.min(1.2, eyeScaleY)));
-        rightEye.setAttribute('ry', 15 * Math.max(0.3, Math.min(1.2, eyeScaleY)));
+        const eyeScaleY = 1 - (faceData.rx / 30) * 0.5;
+        leftEye.setAttribute('ry', 15 * Math.max(0.4, Math.min(1.2, eyeScaleY)));
+        rightEye.setAttribute('ry', 15 * Math.max(0.4, Math.min(1.2, eyeScaleY)));
         
-        // Horizontal eye movement for gaze direction (follows head turn)
-        const eyeShiftX = faceData.ry * 0.3; // Enhanced eye movement
+        // Improved horizontal eye movement for more realistic gaze direction
+        // Eyes follow head turn with proper parallax effect
+        const eyeShiftX = faceData.ry * 0.25; // More subtle eye movement
         leftEye.setAttribute('cx', -25 - eyeShiftX);
         rightEye.setAttribute('cx', 25 - eyeShiftX);
         
-        // More responsive eyebrow movement
-        const baseEyebrowY = -70;
-        const eyebrowExpression = Math.sin(Date.now() / 2000) * 7;  // More pronounced expression
+        // Add subtle eye blinks for more lifelike appearance
+        const blinkRate = 5000; // Average time between blinks in ms
+        const blinkLength = 150; // Duration of a blink in ms
+        const randomOffset = Math.sin(Date.now() / 9777) * 2000; // Add randomness to blink timing
+        const timeSinceBlink = (Date.now() + randomOffset) % blinkRate;
         
-        // Eyebrows react to head tilt
-        const leftEyebrowTilt = faceData.rz * 0.3; // Enhanced tilt sensitivity
-        const rightEyebrowTilt = -faceData.rz * 0.3;
+        // Apply blink if in blink window
+        if (timeSinceBlink < blinkLength) {
+            const blinkProgress = timeSinceBlink / blinkLength;
+            const blinkAmount = Math.sin(blinkProgress * Math.PI);
+            const eyeOpenness = 1 - blinkAmount * 0.9;
+            
+            leftEye.setAttribute('ry', 15 * eyeScaleY * eyeOpenness);
+            rightEye.setAttribute('ry', 15 * eyeScaleY * eyeOpenness);
+        }
+        
+        // More responsive eyebrow movement with natural asymmetry
+        const baseEyebrowY = -70;
+        const eyebrowExpression = Math.sin(Date.now() / 2500) * 5;  // Subtle expression changes
+        
+        // Eyebrows react to head tilt and rotation with natural motion
+        const leftEyebrowTilt = faceData.rz * 0.35 + faceData.ry * 0.15;
+        const rightEyebrowTilt = -faceData.rz * 0.35 - faceData.ry * 0.15;
         
         // Eyebrows go up when looking up, down when looking down
-        const eyebrowYOffset = -faceData.rx * 0.3;
+        const eyebrowYOffset = -faceData.rx * 0.4;
         
-        // Left eyebrow
+        // Left eyebrow with improved expressiveness
         const leftEyebrowYPos = baseEyebrowY + eyebrowExpression + eyebrowYOffset;
         const leftEyebrowPath = `M-40 ${leftEyebrowYPos + leftEyebrowTilt} L-10 ${leftEyebrowYPos - leftEyebrowTilt}`;
         leftEyebrow.setAttribute('d', leftEyebrowPath);
         
-        // Right eyebrow
-        const rightEyebrowYPos = baseEyebrowY + eyebrowExpression + eyebrowYOffset;
+        // Right eyebrow with improved expressiveness
+        const rightEyebrowYPos = baseEyebrowY + eyebrowExpression + eyebrowYOffset + (Math.sin(Date.now() / 3700) * 2); // Slight asymmetry
         const rightEyebrowPath = `M10 ${rightEyebrowYPos + rightEyebrowTilt} L40 ${rightEyebrowYPos - rightEyebrowTilt}`;
         rightEyebrow.setAttribute('d', rightEyebrowPath);
         
-        // Check for head movement (used to detect speaking)
-        const headMovement = Math.abs(faceData.x) + Math.abs(faceData.y);
+        // Check for face movement and use detected mouth openness if available
+        const headMovement = Math.abs(faceData.x) + Math.abs(faceData.y) + Math.abs(faceData.ry);
         const time = Date.now();
         
-        // Determine if "talking" based on head movement or timer
-        const isTalking = headMovement > 1.5 || (time % 4000) < 2000;
+        // Use detected mouth openness from face tracking if available
+        const mouthOpenness = appState.mouthOpenness !== undefined ? 
+            appState.mouthOpenness : 
+            (headMovement > 2 || (time % 5000) < 2500) ? 
+                Math.sin(time / (300 - headMovement * 20)) * 0.5 + 0.5 : 0.2;
         
-        if (isTalking) {
+        // Much more natural mouth animation based on detected speech or movement
+        if (headMovement > 2.5 || (time % 5000) < 2500) {
             // Dynamic talking animation
-            const talkSpeed = Math.max(150, 300 - headMovement * 100);
-            const mouthOpen = Math.sin(time / talkSpeed) * 0.5 + 0.5; // 0 to 1 value
-            mouth.setAttribute('ry', 4 + (mouthOpen * 10)); // More pronounced mouth movement
-            mouth.setAttribute('rx', 20 - (mouthOpen * 5)); // Width changes with talking
+            const baseRY = 4 + (mouthOpenness * 10); // Height based on openness
+            const baseRX = 20 - (mouthOpenness * 4);  // Width changes with talking
+            
+            // Add subtle variations for more natural speech
+            const mouthNoiseX = Math.sin(time / 120) * 2;
+            const mouthNoiseY = Math.cos(time / 180) * 1.5;
+            
+            mouth.setAttribute('ry', baseRY + mouthNoiseY);
+            mouth.setAttribute('rx', baseRX + mouthNoiseX);
         } else {
             // Subtle breathing/idle movement when not talking
-            const breatheSpeed = 2000;
-            const breathe = Math.sin(time / breatheSpeed) * 0.2 + 0.8; // 0.6 to 1 value
+            const breatheSpeed = 3000;
+            const breathe = Math.sin(time / breatheSpeed) * 0.3 + 0.7; // 0.4 to 1 value
             mouth.setAttribute('ry', 4 * breathe);
             mouth.setAttribute('rx', 20);
         }
     } catch (error) {
         console.error('Error updating avatar face:', error);
-        // Basic fallback animation
-        head.setAttribute('transform', 'translate(0, 0) scale(1) rotate(0)');
+        // Basic fallback animation that still maintains some liveliness
+        const time = Date.now();
+        const breathe = Math.sin(time / 3000) * 0.05;
+        const microMove = Math.sin(time / 2000) * 2;
+        
+        head.setAttribute('transform', `translate(${microMove}, 0) scale(${1 + breathe}) rotate(0)`);
         leftEye.setAttribute('ry', 15);
         rightEye.setAttribute('ry', 15);
-        mouth.setAttribute('ry', 8);
+        mouth.setAttribute('ry', 6 + Math.sin(time / 2500) * 2);
+        mouth.setAttribute('rx', 20);
     }
 }
 

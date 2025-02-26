@@ -221,70 +221,72 @@ async function processTracking() {
 // Process MediaPipe Pose results and map to our format
 async function processMediaPipePose(pose) {
     try {
-        // Map MediaPipe pose keypoints to our expected format
-        // BlazePose uses a different set of keypoints than PoseNet
-        // We need to map these to match our avatar's expectations
+        // MediaPipe BlazePose provides 33 keypoints
+        // We need to map these correctly to match our avatar's expectations
         
-        // Create keypoints array with the same structure as PoseNet
-        // MediaPipe provides more points but we'll map the ones we need
+        // Create keypoints array with the same structure as expected by updateAvatarBody
         const keypoints = Array(17).fill(null);
         
-        // Map face points (this may differ based on the exact MediaPipe model)
         if (pose.keypoints) {
-            // Nose
-            const nose = pose.keypoints.find(kp => kp.name === 'nose');
-            if (nose) keypoints[0] = { x: nose.x, y: nose.y, score: nose.score };
+            // MediaPipe provides an array of keypoints with name properties
+            // We need to map them correctly to our expected indices
             
-            // Eyes
-            const leftEye = pose.keypoints.find(kp => kp.name === 'left_eye');
-            const rightEye = pose.keypoints.find(kp => kp.name === 'right_eye');
-            if (leftEye) keypoints[1] = { x: leftEye.x, y: leftEye.y, score: leftEye.score };
-            if (rightEye) keypoints[2] = { x: rightEye.x, y: rightEye.y, score: rightEye.score };
+            // Define a mapping between MediaPipe landmark names and our indices
+            const keypointMapping = {
+                'nose': 0,
+                'left_eye': 1, 'right_eye': 2,
+                'left_ear': 3, 'right_ear': 4,
+                'left_shoulder': 5, 'right_shoulder': 6,
+                'left_elbow': 7, 'right_elbow': 8,
+                'left_wrist': 9, 'right_wrist': 10,
+                'left_hip': 11, 'right_hip': 12,
+                'left_knee': 13, 'right_knee': 14,
+                'left_ankle': 15, 'right_ankle': 16
+            };
             
-            // Ears
-            const leftEar = pose.keypoints.find(kp => kp.name === 'left_ear');
-            const rightEar = pose.keypoints.find(kp => kp.name === 'right_ear');
-            if (leftEar) keypoints[3] = { x: leftEar.x, y: leftEar.y, score: leftEar.score };
-            if (rightEar) keypoints[4] = { x: rightEar.x, y: rightEar.y, score: rightEar.score };
+            // Iterate through all pose keypoints
+            pose.keypoints.forEach(keypoint => {
+                if (keypoint.name && keypointMapping.hasOwnProperty(keypoint.name)) {
+                    const index = keypointMapping[keypoint.name];
+                    keypoints[index] = { 
+                        x: keypoint.x, 
+                        y: keypoint.y, 
+                        score: keypoint.score || 0.5
+                    };
+                }
+            });
             
-            // Shoulders
-            const leftShoulder = pose.keypoints.find(kp => kp.name === 'left_shoulder');
-            const rightShoulder = pose.keypoints.find(kp => kp.name === 'right_shoulder');
-            if (leftShoulder) keypoints[5] = { x: leftShoulder.x, y: leftShoulder.y, score: leftShoulder.score };
-            if (rightShoulder) keypoints[6] = { x: rightShoulder.x, y: rightShoulder.y, score: rightShoulder.score };
-            
-            // Elbows
-            const leftElbow = pose.keypoints.find(kp => kp.name === 'left_elbow');
-            const rightElbow = pose.keypoints.find(kp => kp.name === 'right_elbow');
-            if (leftElbow) keypoints[7] = { x: leftElbow.x, y: leftElbow.y, score: leftElbow.score };
-            if (rightElbow) keypoints[8] = { x: rightElbow.x, y: rightElbow.y, score: rightElbow.score };
-            
-            // Wrists
-            const leftWrist = pose.keypoints.find(kp => kp.name === 'left_wrist');
-            const rightWrist = pose.keypoints.find(kp => kp.name === 'right_wrist');
-            if (leftWrist) keypoints[9] = { x: leftWrist.x, y: leftWrist.y, score: leftWrist.score };
-            if (rightWrist) keypoints[10] = { x: rightWrist.x, y: rightWrist.y, score: rightWrist.score };
-            
-            // Hips
-            const leftHip = pose.keypoints.find(kp => kp.name === 'left_hip');
-            const rightHip = pose.keypoints.find(kp => kp.name === 'right_hip');
-            if (leftHip) keypoints[11] = { x: leftHip.x, y: leftHip.y, score: leftHip.score };
-            if (rightHip) keypoints[12] = { x: rightHip.x, y: rightHip.y, score: rightHip.score };
-            
-            // Knees
-            const leftKnee = pose.keypoints.find(kp => kp.name === 'left_knee');
-            const rightKnee = pose.keypoints.find(kp => kp.name === 'right_knee');
-            if (leftKnee) keypoints[13] = { x: leftKnee.x, y: leftKnee.y, score: leftKnee.score };
-            if (rightKnee) keypoints[14] = { x: rightKnee.x, y: rightKnee.y, score: rightKnee.score };
-            
-            // Ankles
-            const leftAnkle = pose.keypoints.find(kp => kp.name === 'left_ankle');
-            const rightAnkle = pose.keypoints.find(kp => kp.name === 'right_ankle');
-            if (leftAnkle) keypoints[15] = { x: leftAnkle.x, y: leftAnkle.y, score: leftAnkle.score };
-            if (rightAnkle) keypoints[16] = { x: rightAnkle.x, y: rightAnkle.y, score: rightAnkle.score };
+            // Handle if indices are used instead of names in some MediaPipe versions
+            if (!keypoints[0] && pose.keypoints.length >= 33) {
+                // Fallback mapping based on BlazePose's 33 keypoints
+                // These indices might need adjustment based on actual MediaPipe implementation
+                const indexMapping = {
+                    0: 0,  // nose
+                    2: 1, 4: 2,  // eyes
+                    7: 3, 8: 4,  // ears
+                    11: 5, 12: 6, // shoulders
+                    13: 7, 14: 8, // elbows
+                    15: 9, 16: 10, // wrists
+                    23: 11, 24: 12, // hips
+                    25: 13, 26: 14, // knees
+                    27: 15, 28: 16  // ankles
+                };
+                
+                // Apply the index-based mapping
+                Object.entries(indexMapping).forEach(([mpIndex, ourIndex]) => {
+                    const mpIdx = parseInt(mpIndex);
+                    if (pose.keypoints[mpIdx]) {
+                        keypoints[ourIndex] = {
+                            x: pose.keypoints[mpIdx].x,
+                            y: pose.keypoints[mpIdx].y,
+                            score: pose.keypoints[mpIdx].score || 0.5
+                        };
+                    }
+                });
+            }
         }
         
-        // Fill in any missing keypoints with simulation
+        // Fill in any missing keypoints with simulation for smoother animation
         const simulatedPose = simulateBodyPose();
         for (let i = 0; i < keypoints.length; i++) {
             if (!keypoints[i] && simulatedPose[i]) {
@@ -292,28 +294,59 @@ async function processMediaPipePose(pose) {
             }
         }
         
-        // Apply smoothing
-        const smoothedPose = applySmoothing(keypoints, lastBodyPosition, appState.config.smoothingLevel);
+        // Enhanced normalization to better match avatar scale and proportions
+        // This is crucial for making the avatar movements match the body tracking
+        if (keypoints[5] && keypoints[6]) {  // If shoulders are detected
+            const centerX = elements.canvas.width / 2;
+            const centerY = elements.canvas.height / 2;
+            
+            // Calculate shoulder width to scale movements proportionally
+            const shoulderWidth = Math.abs(keypoints[6].x - keypoints[5].x);
+            const scaleFactor = 170 / shoulderWidth; // 170 is the avatar's approximate shoulder width
+            
+            // Apply better scaling to the keypoints
+            keypoints.forEach(point => {
+                if (point) {
+                    // Center the coordinates relative to the midpoint between shoulders
+                    const midShoulderX = (keypoints[5].x + keypoints[6].x) / 2;
+                    const midShoulderY = (keypoints[5].y + keypoints[6].y) / 2;
+                    
+                    // Apply scaled offsets
+                    point.x = ((point.x - midShoulderX) * scaleFactor) + centerX;
+                    point.y = ((point.y - midShoulderY) * scaleFactor) + centerY;
+                }
+            });
+        }
+        
+        // Apply smoothing with improved sensitivity for natural movement
+        const adaptiveSmoothing = Math.min(0.9, appState.config.smoothingLevel * 1.2);
+        const smoothedPose = applySmoothing(keypoints, lastBodyPosition, adaptiveSmoothing);
         lastBodyPosition = smoothedPose;
         
         // Update avatar body based on detected pose
         updateAvatarBody(smoothedPose);
+        
     } catch (error) {
         console.error('Error processing MediaPipe pose:', error);
-        // Fallback to simulation
+        // Fallback to simulation with gradual transition
         const bodyPose = simulateBodyPose();
+        // Blend with last position for smoother fallback
+        if (lastBodyPosition && lastBodyPosition.length > 0) {
+            for (let i = 0; i < bodyPose.length; i++) {
+                if (bodyPose[i] && lastBodyPosition[i]) {
+                    bodyPose[i].x = bodyPose[i].x * 0.3 + lastBodyPosition[i].x * 0.7;
+                    bodyPose[i].y = bodyPose[i].y * 0.3 + lastBodyPosition[i].y * 0.7;
+                }
+            }
+        }
         lastBodyPosition = bodyPose;
         updateAvatarBody(bodyPose);
     }
 }
 
-// Process MediaPipe Face Mesh results and map to our format
 async function processMediaPipeFace(face) {
     try {
-        // Map MediaPipe face mesh landmarks to our face parameters
-        // MediaPipe Face Mesh gives us 468 landmarks
-        
-        // Calculate face position and rotation based on key points
+        // Initialize face data structure
         let faceData = {
             x: 0,
             y: 0,
@@ -324,73 +357,117 @@ async function processMediaPipeFace(face) {
         };
         
         if (face.keypoints) {
-            // Get key face landmarks
+            // MediaPipe Face Mesh has 468 landmarks
+            // We need specific points for accurate face tracking
+            
+            // First, identify key facial landmarks by name or index
+            // The most reliable method is to use the standard indices from MediaPipe
             const keypoints = face.keypoints;
             
-            // Basic face position
-            // This uses the middle of the face as reference
-            const noseTip = keypoints.find(kp => kp.name === 'noseTip') || keypoints[1]; // Fallback to center point
-            const leftEye = keypoints.find(kp => kp.name === 'leftEye') || keypoints[33];
-            const rightEye = keypoints.find(kp => kp.name === 'rightEye') || keypoints[263];
-            const leftCheek = keypoints.find(kp => kp.name === 'leftCheek') || keypoints[50];
-            const rightCheek = keypoints.find(kp => kp.name === 'rightCheek') || keypoints[280];
-            const faceCenter = keypoints.find(kp => kp.name === 'midwayBetweenEyes') || keypoints[168];
+            // Map key face points (MediaPipe Face Mesh standard indices)
+            const noseTip = findKeypoint(keypoints, 'noseTip', 4);
+            const foreHead = findKeypoint(keypoints, 'foreheadCenter', 151);
+            const leftEye = findKeypoint(keypoints, 'leftEye', 159);
+            const rightEye = findKeypoint(keypoints, 'rightEye', 386);
+            const leftCheek = findKeypoint(keypoints, 'leftCheek', 187);
+            const rightCheek = findKeypoint(keypoints, 'rightCheek', 411);
+            const leftMouth = findKeypoint(keypoints, 'leftMouth', 61);
+            const rightMouth = findKeypoint(keypoints, 'rightMouth', 291);
+            const topMouth = findKeypoint(keypoints, 'topMouth', 0);
+            const bottomMouth = findKeypoint(keypoints, 'bottomMouth', 17);
             
-            // Calculate normalized position relative to center of video
-            const videoWidth = elements.video.videoWidth || elements.video.width;
-            const videoHeight = elements.video.videoHeight || elements.video.height;
+            // Get video dimensions
+            const videoWidth = elements.video.videoWidth || elements.video.width || elements.canvas.width;
+            const videoHeight = elements.video.videoHeight || elements.video.height || elements.canvas.height;
             const centerX = videoWidth / 2;
             const centerY = videoHeight / 2;
             
-            // Position in normalized coordinates (-1 to 1 range)
-            faceData.x = ((faceCenter ? faceCenter.x : noseTip.x) - centerX) / (centerX / 2);
-            faceData.y = ((faceCenter ? faceCenter.y : noseTip.y) - centerY) / (centerY / 2);
+            // Calculate face center for more stable positioning
+            const faceCenterX = noseTip ? noseTip.x : (leftEye && rightEye ? (leftEye.x + rightEye.x) / 2 : centerX);
+            const faceCenterY = noseTip ? noseTip.y : (leftEye && rightEye ? (leftEye.y + rightEye.y) / 2 : centerY);
             
-            // Calculate face width for scale/depth
-            const faceWidth = leftCheek && rightCheek ? 
-                Math.abs(rightCheek.x - leftCheek.x) / videoWidth : 0.15;
-            faceData.z = (faceWidth - 0.15) * 2;
+            // Improved calculation of normalized position
+            // Use a proportional scale factor for more natural movement
+            const faceMovementScale = 2.5; // Amplify face movement for more visible animation
+            faceData.x = ((faceCenterX - centerX) / centerX) * 20 * faceMovementScale;
+            faceData.y = ((faceCenterY - centerY) / centerY) * 15 * faceMovementScale;
             
-            // Calculate face rotation
+            // Better depth calculation using eye distance for scale
             if (leftEye && rightEye) {
-                // Yaw (turning left/right) - based on eye positions
-                const eyeDiffX = rightEye.x - leftEye.x;
-                const normalEyeDiffX = videoWidth * 0.08; // Expected eye distance when facing forward
-                faceData.ry = (eyeDiffX - normalEyeDiffX) / normalEyeDiffX * 15;
-                
+                const eyeDistance = Math.sqrt(
+                    Math.pow(rightEye.x - leftEye.x, 2) + 
+                    Math.pow(rightEye.y - leftEye.y, 2)
+                );
+                const normalizedEyeDistance = eyeDistance / videoWidth;
+                // Calibrated conversion from eye distance to depth
+                faceData.z = (normalizedEyeDistance - 0.09) * 3;
+            }
+            
+            // Improved rotation calculations
+            if (leftEye && rightEye) {
                 // Roll (tilting head side to side) - angle between eyes
-                const eyeDiffY = rightEye.y - leftEye.y;
-                faceData.rz = Math.atan2(eyeDiffY, eyeDiffX) * (180 / Math.PI);
+                const eyeDeltaX = rightEye.x - leftEye.x;
+                const eyeDeltaY = rightEye.y - leftEye.y;
+                faceData.rz = Math.atan2(eyeDeltaY, eyeDeltaX) * (180 / Math.PI);
                 
-                // Pitch (nodding up/down) - harder to estimate with 2D landmarks
-                // This is a simplified approximation
-                if (noseTip && faceCenter) {
-                    const noseVectorY = noseTip.y - faceCenter.y;
-                    const normalNoseVectorY = videoHeight * 0.03; // Expected nose length
-                    faceData.rx = (noseVectorY - normalNoseVectorY) / normalNoseVectorY * 15;
+                // Yaw (turning left/right) - based on eye width compared to normal
+                const standardEyeDistance = videoWidth * 0.12; // Expected distance when facing forward
+                const currentEyeDistance = Math.abs(eyeDeltaX);
+                const eyeDistanceRatio = currentEyeDistance / standardEyeDistance;
+                // Calculate yaw angle with more natural limits
+                faceData.ry = (1 - eyeDistanceRatio) * 45 * Math.sign(centerX - faceCenterX);
+                
+                // Pitch (nodding up/down) - using nose and forehead positions
+                if (noseTip && foreHead) {
+                    const noseToForeheadVector = {
+                        x: foreHead.x - noseTip.x,
+                        y: foreHead.y - noseTip.y
+                    };
+                    const verticalAngle = Math.atan2(noseToForeheadVector.y, noseToForeheadVector.x) * (180 / Math.PI);
+                    // Map to a reasonable pitch range
+                    faceData.rx = -verticalAngle * 1.5;
+                }
+                
+                // Alternative pitch calculation using mouth position
+                if (!foreHead && topMouth && bottomMouth) {
+                    const mouthHeight = Math.abs(topMouth.y - bottomMouth.y);
+                    const normalMouthHeight = videoHeight * 0.03;
+                    const mouthRatio = mouthHeight / normalMouthHeight;
+                    faceData.rx = (1 - mouthRatio) * 30;
                 }
             }
             
-            // Limit values to reasonable ranges
-            faceData.x = Math.max(-50, Math.min(50, faceData.x));
-            faceData.y = Math.max(-50, Math.min(50, faceData.y));
-            faceData.z = Math.max(-0.2, Math.min(0.3, faceData.z));
-            faceData.rx = Math.max(-45, Math.min(45, faceData.rx));
-            faceData.ry = Math.max(-45, Math.min(45, faceData.ry));
-            faceData.rz = Math.max(-30, Math.min(30, faceData.rz));
+            // Add mouth tracking for talking animation
+            if (leftMouth && rightMouth && topMouth && bottomMouth) {
+                // Calculate mouth openness
+                const mouthWidth = Math.abs(rightMouth.x - leftMouth.x);
+                const mouthHeight = Math.abs(bottomMouth.y - topMouth.y);
+                const mouthRatio = mouthHeight / mouthWidth;
+                
+                // Store mouth openness in appState for avatar animation
+                appState.mouthOpenness = Math.min(1, Math.max(0, mouthRatio * 3));
+            }
+            
+            // Limit values to reasonable ranges with smoother transitions
+            faceData.x = Math.max(-40, Math.min(40, faceData.x));
+            faceData.y = Math.max(-40, Math.min(40, faceData.y));
+            faceData.z = Math.max(-0.3, Math.min(0.3, faceData.z));
+            faceData.rx = Math.max(-30, Math.min(30, faceData.rx));
+            faceData.ry = Math.max(-40, Math.min(40, faceData.ry));
+            faceData.rz = Math.max(-20, Math.min(20, faceData.rz));
         } else {
             // Fallback to simulation
             faceData = simulateFaceDetection();
         }
         
-        // Apply smoothing to each property
+        // Apply smoothing with enhanced responsiveness based on movement magnitude
         const smoothedFace = {
-            x: applySmoothing(faceData.x, lastFacePosition.x, appState.config.smoothingLevel),
-            y: applySmoothing(faceData.y, lastFacePosition.y, appState.config.smoothingLevel),
-            z: applySmoothing(faceData.z, lastFacePosition.z, appState.config.smoothingLevel),
-            rx: applySmoothing(faceData.rx, lastFacePosition.rx, appState.config.smoothingLevel),
-            ry: applySmoothing(faceData.ry, lastFacePosition.ry, appState.config.smoothingLevel),
-            rz: applySmoothing(faceData.rz, lastFacePosition.rz, appState.config.smoothingLevel)
+            x: applyAdaptiveSmoothing(faceData.x, lastFacePosition.x, appState.config.smoothingLevel),
+            y: applyAdaptiveSmoothing(faceData.y, lastFacePosition.y, appState.config.smoothingLevel),
+            z: applyAdaptiveSmoothing(faceData.z, lastFacePosition.z, appState.config.smoothingLevel + 0.1), // Extra smoothing for depth
+            rx: applyAdaptiveSmoothing(faceData.rx, lastFacePosition.rx, appState.config.smoothingLevel),
+            ry: applyAdaptiveSmoothing(faceData.ry, lastFacePosition.ry, appState.config.smoothingLevel),
+            rz: applyAdaptiveSmoothing(faceData.rz, lastFacePosition.rz, appState.config.smoothingLevel)
         };
         
         lastFacePosition = smoothedFace;
@@ -399,11 +476,50 @@ async function processMediaPipeFace(face) {
         updateAvatarFace(smoothedFace);
     } catch (error) {
         console.error('Error processing MediaPipe face:', error);
-        // Fallback to simulation
+        // Fallback to simulation with transition blending
         const faceData = simulateFaceDetection();
+        // Blend with last position for smoother fallback
+        if (lastFacePosition) {
+            faceData.x = faceData.x * 0.3 + lastFacePosition.x * 0.7;
+            faceData.y = faceData.y * 0.3 + lastFacePosition.y * 0.7;
+            faceData.z = faceData.z * 0.3 + lastFacePosition.z * 0.7;
+            faceData.rx = faceData.rx * 0.3 + lastFacePosition.rx * 0.7;
+            faceData.ry = faceData.ry * 0.3 + lastFacePosition.ry * 0.7;
+            faceData.rz = faceData.rz * 0.3 + lastFacePosition.rz * 0.7;
+        }
         lastFacePosition = faceData;
         updateAvatarFace(faceData);
     }
+}
+
+// Helper function to find keypoint by name or index with fallback
+function findKeypoint(keypoints, name, fallbackIndex) {
+    // Try to find by name first (for newer MediaPipe versions)
+    const namedKeypoint = keypoints.find(kp => kp.name === name);
+    if (namedKeypoint) return namedKeypoint;
+    
+    // Fallback to index (for older MediaPipe versions)
+    return keypoints[fallbackIndex] || null;
+}
+
+// Improved adaptive smoothing based on movement speed
+function applyAdaptiveSmoothing(newValue, oldValue, baseSmoothingFactor) {
+    if (oldValue === undefined) return newValue;
+    
+    // Calculate movement magnitude
+    const movement = Math.abs(newValue - oldValue);
+    
+    // Adjust smoothing factor - less smoothing for faster movements
+    // This makes the avatar more responsive during quick movements
+    let adaptiveFactor = baseSmoothingFactor;
+    if (movement > 10) {
+        adaptiveFactor = Math.max(0.1, baseSmoothingFactor - 0.3);
+    } else if (movement > 5) {
+        adaptiveFactor = Math.max(0.2, baseSmoothingFactor - 0.15);
+    }
+    
+    // Apply smoothing with the adaptive factor
+    return oldValue * adaptiveFactor + newValue * (1 - adaptiveFactor);
 }
 
 // Apply smoothing to movement
