@@ -1,368 +1,389 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Face Tracking</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
-            background-color: #000;
-            font-family: monospace;
-        }
-        
-        #videoElement {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transform: scaleX(-1); /* Mirror video */
-            opacity: 0; /* Hide video by default */
-        }
-        
-        #canvasOutput {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            z-index: 5;
-            transform: scaleX(-1); /* Mirror debug visualization to match the video */
-        }
-        
-        #animationCanvas {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            z-index: 10;
-            transform: scaleX(-1); /* Mirror animation to match the video */
-        }
-        
-        #debugInfo {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: #0f0;
-            padding: 10px;
-            font-family: monospace;
-            border-radius: 5px;
-            z-index: 100;
-        }
-        
-        #controls {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 100;
-            display: flex;
-            gap: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px;
-            border-radius: 10px;
-        }
-        
-        button {
-            padding: 10px 20px;
-            cursor: pointer;
-            background: #000;
-            border: 1px solid #0f0;
-            color: #0f0;
-            border-radius: 4px;
-            font-weight: bold;
-            font-family: monospace;
-            text-transform: uppercase;
-        }
-        
-        button:hover {
-            background: #0f0;
-            color: #000;
-        }
-        
-        button:disabled {
-            background: #333;
-            border-color: #555;
-            color: #555;
-            cursor: not-allowed;
-        }
-        
-        #loadingText {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            background-color: #000;
-            color: #0f0;
-            z-index: 1000;
-            font-size: 24px;
-            font-family: monospace;
-            text-transform: uppercase;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Face Tracking with 3D Mask Option</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: #000;
+      font-family: monospace;
+    }
+    #videoElement {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* Mirror video */
+      opacity: 0; /* Hide video by default */
+    }
+    #canvasOutput {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      z-index: 5;
+      transform: scaleX(-1);
+    }
+    #animationCanvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      transform: scaleX(-1);
+    }
+    /* Three.js canvas for the 3D mask */
+    #threeCanvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      z-index: 15;
+      pointer-events: none;
+      display: none;
+    }
+    #debugInfo {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background-color: rgba(0,0,0,0.7);
+      color: #0f0;
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 100;
+    }
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 15px;
+      border-radius: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      cursor: pointer;
+      background: #000;
+      border: 1px solid #0f0;
+      color: #0f0;
+      border-radius: 4px;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-family: monospace;
+    }
+    button:hover {
+      background: #0f0;
+      color: #000;
+    }
+    button:disabled {
+      background: #333;
+      border-color: #555;
+      color: #555;
+      cursor: not-allowed;
+    }
+    #loadingText {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-color: #000;
+      color: #0f0;
+      z-index: 1000;
+      font-size: 24px;
+      text-transform: uppercase;
+      font-family: monospace;
+    }
+  </style>
 </head>
 <body>
-    <!-- Loading Screen -->
-    <div id="loadingText">
-        <div>Initializing Face Tracking</div>
-        <div style="margin-top: 20px; font-size: 16px;">Loading system...</div>
-    </div>
-    
-    <!-- Debug Info -->
-    <div id="debugInfo">
-        Status: Initializing face tracking...
-    </div>
-    
-    <!-- Controls -->
-    <div id="controls">
-        <button id="startButton">Start Camera</button>
-        <button id="stopButton" disabled>Stop Tracking</button>
-        <button id="toggleVideoBtn">Show Video</button>
-    </div>
-    
-    <!-- Video and Canvas for MediaPipe -->
-    <video id="videoElement" playsinline autoplay></video>
-    <canvas id="canvasOutput"></canvas>
-    <canvas id="animationCanvas"></canvas>
-    
-    <!-- MediaPipe Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
-    
-    <script>
-        // Elements
-        const elements = {
-            video: document.getElementById('videoElement'),
-            canvas: document.getElementById('canvasOutput'),
-            ctx: document.getElementById('canvasOutput').getContext('2d'),
-            animCanvas: document.getElementById('animationCanvas'),
-            animCtx: document.getElementById('animationCanvas').getContext('2d'),
-            debugInfo: document.getElementById('debugInfo'),
-            loading: document.getElementById('loadingText'),
-            startButton: document.getElementById('startButton'),
-            stopButton: document.getElementById('stopButton'),
-            toggleVideoBtn: document.getElementById('toggleVideoBtn')
-        };
-        
-        // App state
-        const state = {
-            isTracking: false,
-            isVideoVisible: false
-        };
-        
-        // MediaPipe objects
-        let camera = null;
-        let faceMesh = null;
-        
-        // Eye landmarks
-        // Using the center points of the irises for pupil tracking
-        const LEFT_IRIS_CENTER = 468;  // Center point of left iris
-        const RIGHT_IRIS_CENTER = 473;  // Center point of right iris
-        
-        // Initialize the application
-        async function initApp() {
-            // Set up canvases
-            setupCanvas();
-            
-            // Initialize tracking models
-            try {
-                await setupFaceMesh();
-                elements.debugInfo.textContent = 'Status: Ready! Click "Start Camera" to begin.';
-                elements.loading.style.display = 'none';
-            } catch (error) {
-                console.error('Error initializing tracking:', error);
-                elements.debugInfo.textContent = `Error: ${error.message}`;
-                elements.loading.style.display = 'none';
+  <!-- Loading Screen -->
+  <div id="loadingText">
+    <div>Initializing Face Tracking</div>
+    <div style="margin-top: 20px; font-size: 16px;">Loading system...</div>
+  </div>
+
+  <!-- Debug Info -->
+  <div id="debugInfo">Status: Initializing face tracking...</div>
+
+  <!-- Controls -->
+  <div id="controls">
+    <button id="startButton">Start Camera</button>
+    <button id="stopButton" disabled>Stop Tracking</button>
+    <button id="toggleVideoBtn">Show Video</button>
+    <button id="toggle3dMaskBtn">Use 3D Mask</button>
+  </div>
+
+  <!-- Video and Canvases -->
+  <video id="videoElement" playsinline autoplay></video>
+  <canvas id="canvasOutput"></canvas>
+  <canvas id="animationCanvas"></canvas>
+  <canvas id="threeCanvas"></canvas>
+
+  <!-- MediaPipe Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+  <!-- Three.js Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- (Optionally include GLTFLoader if using a glTF model) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+  <script>
+    // Elements
+    const elements = {
+      video: document.getElementById('videoElement'),
+      canvas: document.getElementById('canvasOutput'),
+      ctx: document.getElementById('canvasOutput').getContext('2d'),
+      animCanvas: document.getElementById('animationCanvas'),
+      animCtx: document.getElementById('animationCanvas').getContext('2d'),
+      threeCanvas: document.getElementById('threeCanvas'),
+      debugInfo: document.getElementById('debugInfo'),
+      loading: document.getElementById('loadingText'),
+      startButton: document.getElementById('startButton'),
+      stopButton: document.getElementById('stopButton'),
+      toggleVideoBtn: document.getElementById('toggleVideoBtn'),
+      toggle3dMaskBtn: document.getElementById('toggle3dMaskBtn')
+    };
+
+    // App state
+    const state = {
+      isTracking: false,
+      isVideoVisible: false,
+      use3dMask: false // toggles between facemask and 3D mask
+    };
+
+    // MediaPipe objects
+    let camera = null;
+    let faceMesh = null;
+
+    // 3D Mask (Three.js) variables
+    let threeScene, threeCamera, threeRenderer, mask3D;
+    initThreeJS();
+
+    function initThreeJS() {
+  // Set up Three.js scene, camera, renderer on the #threeCanvas element
+  threeScene = new THREE.Scene();
+  threeCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+  threeRenderer = new THREE.WebGLRenderer({ canvas: elements.threeCanvas, alpha: true });
+  threeRenderer.setSize(window.innerWidth, window.innerHeight);
+  threeRenderer.setClearColor(0x000000, 0); // transparent background
+
+  // Add ambient light to illuminate the scene uniformly
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1); // white light at full intensity
+  threeScene.add(ambientLight);
+
+  // Optionally add a directional light for some shadows and depth
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+  directionalLight.position.set(0, 1, 1);
+  threeScene.add(directionalLight);
+
+  // Position the camera so that the 3D mask is in view
+  threeCamera.position.set(0, 0, 5);
+
+  // Load a 3D mask model (GLTF format assumed)
+  const loader = new THREE.GLTFLoader();
+  loader.load('stylized_face.glb', function(gltf) {
+    mask3D = gltf.scene;
+    // Center and scale the model as needed. Adjust these values.
+    mask3D.position.set(0, 0, 0);
+    mask3D.scale.set(1, 1, 1);
+    threeScene.add(mask3D);
+  }, undefined, function(error) {
+    console.error('Error loading 3D mask:', error);
+  });
+}
+
+    // Update Three.js scene (called each frame if 3D mode is enabled)
+    function update3DMask(landmarks) {
+      if (!mask3D) return;
+      
+      // Example: Use nose tip (landmark 1) and left/right eye corners (landmarks 33 and 263) for positioning and scale.
+      // You will likely need to refine this math to match your 3D model to the face mesh.
+      const nose = landmarks[1];
+      const leftEye = landmarks[33];
+      const rightEye = landmarks[263];
+
+      // Compute center in canvas space then convert to Three.js coordinate system.
+      // This example assumes a simple mapping; you may need to adjust based on your scene.
+      const centerX = (nose.x - 0.5) * 2; // mapping normalized [0,1] to [-1,1]
+      const centerY = -(nose.y - 0.5) * 2;
+
+      // Update 3D mask position
+      mask3D.position.set(centerX, centerY, 0);
+
+      // Update scale based on eye distance (approximate face width)
+      const dx = (leftEye.x - rightEye.x);
+      const dy = (leftEye.y - rightEye.y);
+      const faceWidth = Math.sqrt(dx * dx + dy * dy);
+      // Set a base scale (tweak the multiplier as needed)
+      const scale = faceWidth * 3;
+      mask3D.scale.set(scale, scale, scale);
+
+      // Optionally update rotation based on face orientation
+      // (This is a simplified example; a full solution might compute a rotation matrix from multiple landmarks.)
+      mask3D.rotation.set(0, 0, 0);
+    }
+
+    // Render Three.js scene
+    function renderThree() {
+      if (state.use3dMask) {
+        threeRenderer.render(threeScene, threeCamera);
+      }
+    }
+
+    // Set up canvas sizes
+    function setupCanvas() {
+      const resizeCanvas = () => {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        elements.canvas.width = width;
+        elements.canvas.height = height;
+        elements.animCanvas.width = width;
+        elements.animCanvas.height = height;
+        threeRenderer.setSize(width, height);
+        threeCamera.aspect = width / height;
+        threeCamera.updateProjectionMatrix();
+      };
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+    }
+
+    // Set up MediaPipe Face Mesh
+    async function setupFaceMesh() {
+      elements.debugInfo.textContent = 'Status: Loading MediaPipe models...';
+      faceMesh = new FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+      });
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+      faceMesh.onResults(onFaceMeshResults);
+      elements.debugInfo.textContent = 'Status: MediaPipe models loaded';
+      return true;
+    }
+
+    // Start camera
+    async function startCamera() {
+      try {
+        camera = new Camera(elements.video, {
+          onFrame: async () => {
+            if (state.isTracking) {
+              await faceMesh.send({ image: elements.video });
             }
-            
-            // Add event listeners
-            elements.startButton.addEventListener('click', startCamera);
-            elements.stopButton.addEventListener('click', stopTracking);
-            elements.toggleVideoBtn.addEventListener('click', toggleVideo);
+          },
+          width: 1280,
+          height: 720
+        });
+        await camera.start();
+        state.isTracking = true;
+        elements.startButton.disabled = true;
+        elements.stopButton.disabled = false;
+        elements.debugInfo.textContent = 'Status: Tracking Active';
+      } catch (error) {
+        console.error('Error starting camera:', error);
+        elements.debugInfo.textContent = `Camera error: ${error.message}`;
+      }
+    }
+
+    // Stop tracking
+    function stopTracking() {
+      if (camera) camera.stop();
+      state.isTracking = false;
+      elements.startButton.disabled = false;
+      elements.stopButton.disabled = true;
+      elements.debugInfo.textContent = 'Status: Tracking Stopped';
+      elements.ctx.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
+      elements.animCtx.clearRect(0, 0, elements.animCanvas.width, elements.animCanvas.height);
+    }
+
+    // Toggle video visibility
+    function toggleVideo() {
+      state.isVideoVisible = !state.isVideoVisible;
+      elements.video.style.opacity = state.isVideoVisible ? '0.7' : '0';
+      elements.toggleVideoBtn.textContent = state.isVideoVisible ? 'Hide Video' : 'Show Video';
+    }
+
+    // Toggle 3D mask mode
+    function toggle3DMask() {
+      state.use3dMask = !state.use3dMask;
+      elements.toggle3dMaskBtn.textContent = state.use3dMask ? 'Use Facemask' : 'Use 3D Mask';
+      // Show/hide the Three.js canvas accordingly
+      elements.threeCanvas.style.display = state.use3dMask ? 'block' : 'none';
+      // Optionally, hide the 2D animation canvas if using 3D
+      elements.animCanvas.style.display = state.use3dMask ? 'none' : 'block';
+    }
+
+    // Process face mesh results
+    function onFaceMeshResults(results) {
+      if (!state.isTracking) return;
+      // Clear 2D canvases
+      elements.ctx.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
+      elements.animCtx.clearRect(0, 0, elements.animCanvas.width, elements.animCanvas.height);
+      
+      if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+        elements.debugInfo.textContent = 'No face detected';
+        return;
+      }
+      
+      for (const landmarks of results.multiFaceLandmarks) {
+        // Draw facemask if 3D is NOT enabled
+        if (!state.use3dMask) {
+          drawConnectors(elements.ctx, landmarks, FACEMESH_TESSELATION, { color: '#FFFFFF20', lineWidth: 1 });
+          drawConnectors(elements.ctx, landmarks, FACEMESH_RIGHT_EYE, { color: '#FFFFFF', lineWidth: 1 });
+          drawConnectors(elements.ctx, landmarks, FACEMESH_LEFT_EYE, { color: '#FFFFFF', lineWidth: 1 });
+          drawConnectors(elements.ctx, landmarks, FACEMESH_FACE_OVAL, { color: '#FFFFFF', lineWidth: 1 });
+          drawConnectors(elements.ctx, landmarks, FACEMESH_LIPS, { color: '#FFFFFF', lineWidth: 1 });
+          drawConnectors(elements.animCtx, landmarks, FACEMESH_TESSELATION, { color: '#FFFFFF40', lineWidth: 1.5 });
+          drawConnectors(elements.animCtx, landmarks, FACEMESH_RIGHT_EYE, { color: '#FFFFFF', lineWidth: 2 });
+          drawConnectors(elements.animCtx, landmarks, FACEMESH_LEFT_EYE, { color: '#FFFFFF', lineWidth: 2 });
+          drawConnectors(elements.animCtx, landmarks, FACEMESH_FACE_OVAL, { color: '#FFFFFF', lineWidth: 2.5 });
+          drawConnectors(elements.animCtx, landmarks, FACEMESH_LIPS, { color: '#FFFFFF', lineWidth: 2 });
         }
-        
-        // Set up canvas sizes
-        function setupCanvas() {
-            const resizeCanvas = () => {
-                const width = window.innerWidth;
-                const height = window.innerHeight;
-                
-                // Set canvas dimensions
-                elements.canvas.width = width;
-                elements.canvas.height = height;
-                elements.animCanvas.width = width;
-                elements.animCanvas.height = height;
-            };
-            
-            // Initial setup
-            resizeCanvas();
-            
-            // Re-adjust on resize
-            window.addEventListener('resize', resizeCanvas);
+        // If using 3D mask, update its transform
+        else {
+          update3DMask(landmarks);
         }
-        
-        // Set up MediaPipe Face Mesh
-        async function setupFaceMesh() {
-            elements.debugInfo.textContent = 'Status: Loading MediaPipe models...';
-            
-            // Initialize Face Mesh
-            faceMesh = new FaceMesh({
-                locateFile: (file) => {
-                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-                }
-            });
-            
-            // Set face mesh options
-            faceMesh.setOptions({
-                maxNumFaces: 1,
-                refineLandmarks: true,  // Enable iris tracking
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
-            
-            // Set up result handler
-            faceMesh.onResults(onFaceMeshResults);
-            
-            elements.debugInfo.textContent = 'Status: MediaPipe models loaded';
-            return true;
-        }
-        
-        // Start camera
-        async function startCamera() {
-            try {
-                // Set up camera with MediaPipe Camera Utils
-                camera = new Camera(elements.video, {
-                    onFrame: async () => {
-                        if (state.isTracking) {
-                            await faceMesh.send({image: elements.video});
-                        }
-                    },
-                    width: 1280,
-                    height: 720
-                });
-                
-                // Start camera
-                await camera.start();
-                
-                // Update state and UI
-                state.isTracking = true;
-                elements.startButton.disabled = true;
-                elements.stopButton.disabled = false;
-                elements.debugInfo.textContent = 'Status: Tracking Active';
-            } catch (error) {
-                console.error('Error starting camera:', error);
-                elements.debugInfo.textContent = `Camera error: ${error.message}`;
-            }
-        }
-        
-        // Stop tracking
-        function stopTracking() {
-            // Stop camera
-            if (camera) {
-                camera.stop();
-            }
-            
-            // Update state and UI
-            state.isTracking = false;
-            elements.startButton.disabled = false;
-            elements.stopButton.disabled = true;
-            elements.debugInfo.textContent = 'Status: Tracking Stopped';
-            
-            // Clear canvases
-            elements.ctx.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
-            elements.animCtx.clearRect(0, 0, elements.animCanvas.width, elements.animCanvas.height);
-        }
-        
-        // Toggle video visibility
-        function toggleVideo() {
-            state.isVideoVisible = !state.isVideoVisible;
-            elements.video.style.opacity = state.isVideoVisible ? '0.7' : '0';
-            elements.toggleVideoBtn.textContent = state.isVideoVisible ? 'Hide Video' : 'Show Video';
-        }
-        
-        // Draw eye pupils
-        function drawPupil(ctx, landmarks, irisCenter, color) {
-            // Get the center point coordinates
-            const centerX = landmarks[irisCenter].x * ctx.canvas.width;
-            const centerY = landmarks[irisCenter].y * ctx.canvas.height;
-            
-            // Draw a solid black circle for the pupil
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
-            ctx.fillStyle = "#000000";
-            ctx.fill();
-            
-            // Draw a colored outline for visibility
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-        }
-        
-        // Process face mesh results
-        function onFaceMeshResults(results) {
-            if (!state.isTracking) return;
-            
-            // Clear canvases
-            elements.ctx.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
-            elements.animCtx.clearRect(0, 0, elements.animCanvas.width, elements.animCanvas.height);
-            
-            // If no face detected, update debug info
-            if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
-                elements.debugInfo.textContent = 'No face detected';
-                return;
-            }
-            
-            // Draw face mesh on both canvases
-            for (const landmarks of results.multiFaceLandmarks) {
-                // Draw debug visualization on canvasOutput
-                drawConnectors(elements.ctx, landmarks, FACEMESH_TESSELATION, 
-                    {color: '#FFFFFF20', lineWidth: 1});
-                drawConnectors(elements.ctx, landmarks, FACEMESH_RIGHT_EYE, 
-                    {color: '#FFFFFF', lineWidth: 1});
-                drawConnectors(elements.ctx, landmarks, FACEMESH_LEFT_EYE, 
-                    {color: '#FFFFFF', lineWidth: 1});
-                drawConnectors(elements.ctx, landmarks, FACEMESH_FACE_OVAL, 
-                    {color: '#FFFFFF', lineWidth: 1});
-                drawConnectors(elements.ctx, landmarks, FACEMESH_LIPS, 
-                    {color: '#FFFFFF', lineWidth: 1});
-                
-                // Draw eye pupils on debug canvas
-                drawPupil(elements.ctx, landmarks, LEFT_IRIS_CENTER, '#00FFFF');
-                drawPupil(elements.ctx, landmarks, RIGHT_IRIS_CENTER, '#00FFFF');
-                
-                // Draw stylized face mesh on animationCanvas
-                drawConnectors(elements.animCtx, landmarks, FACEMESH_TESSELATION, 
-                    {color: '#FFFFFF40', lineWidth: 1.5});
-                drawConnectors(elements.animCtx, landmarks, FACEMESH_RIGHT_EYE, 
-                    {color: '#FFFFFF', lineWidth: 2});
-                drawConnectors(elements.animCtx, landmarks, FACEMESH_LEFT_EYE, 
-                    {color: '#FFFFFF', lineWidth: 2});
-                drawConnectors(elements.animCtx, landmarks, FACEMESH_FACE_OVAL, 
-                    {color: '#FFFFFF', lineWidth: 2.5});
-                drawConnectors(elements.animCtx, landmarks, FACEMESH_LIPS, 
-                    {color: '#FFFFFF', lineWidth: 2});
-                
-                // Draw eye pupils on animation canvas
-                drawPupil(elements.animCtx, landmarks, LEFT_IRIS_CENTER, '#00FFFF');
-                drawPupil(elements.animCtx, landmarks, RIGHT_IRIS_CENTER, '#00FFFF');
-            }
-            
-            // Update debug info
-            elements.debugInfo.textContent = 'Face detected! Tracking active.';
-        }
-        
-        // Initialize the application on page load
-        window.addEventListener('DOMContentLoaded', initApp);
-    </script>
+      }
+      
+      // Always update debug info
+      elements.debugInfo.textContent = 'Face detected! Tracking active.';
+      // If in 3D mode, render the Three.js scene
+      if (state.use3dMask) renderThree();
+    }
+
+    // Initialize application on page load
+    window.addEventListener('DOMContentLoaded', initApp);
+    async function initApp() {
+      setupCanvas();
+      try {
+        await setupFaceMesh();
+        elements.debugInfo.textContent = 'Status: Ready! Click "Start Camera" to begin.';
+        elements.loading.style.display = 'none';
+      } catch (error) {
+        console.error('Error initializing tracking:', error);
+        elements.debugInfo.textContent = `Error: ${error.message}`;
+        elements.loading.style.display = 'none';
+      }
+      elements.startButton.addEventListener('click', startCamera);
+      elements.stopButton.addEventListener('click', stopTracking);
+      elements.toggleVideoBtn.addEventListener('click', toggleVideo);
+      elements.toggle3dMaskBtn.addEventListener('click', toggle3DMask);
+    }
+  </script>
 </body>
 </html>
